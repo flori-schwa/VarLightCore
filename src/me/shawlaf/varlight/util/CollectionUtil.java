@@ -1,14 +1,12 @@
 package me.shawlaf.varlight.util;
 
+import lombok.experimental.UtilityClass;
+
 import java.util.ArrayList;
 import java.util.List;
 
+@UtilityClass
 public class CollectionUtil {
-
-    private CollectionUtil() {
-        throw new IllegalStateException("cannot create instance of util class");
-    }
-
     public static <E> List<E> toList(E[] array) {
         List<E> list = new ArrayList<>(array.length);
 

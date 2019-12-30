@@ -1,17 +1,15 @@
 package me.shawlaf.varlight.util;
 
+import lombok.experimental.UtilityClass;
+
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.zip.GZIPInputStream;
 
+@UtilityClass
 public class FileUtil {
-
-    private FileUtil() {
-        throw new IllegalStateException("Instantiating Util class!");
-    }
-
     public static String getExtension(File file) {
         String path = file.getAbsolutePath();
 
