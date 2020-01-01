@@ -13,6 +13,8 @@ import java.util.*;
 import java.util.function.IntFunction;
 import java.util.zip.GZIPInputStream;
 
+import static me.shawlaf.varlight.persistence.vldb.VLDBUtil.SIZEOF_OFFSET_TABLE_ENTRY;
+
 public class VLDBInputStream implements Closeable {
 
     public static int VLDB_MAGIC = 0x56_4C_44_42;
@@ -43,7 +45,7 @@ public class VLDBInputStream implements Closeable {
                 in = new VLDBInputStream(fis);
             }
 
-             isVLDB = in.readVLDBMagic();
+            isVLDB = in.readVLDBMagic();
         }
 
 
@@ -63,9 +65,9 @@ public class VLDBInputStream implements Closeable {
 
         List<L> lightSources = new ArrayList<>();
 
-        final short amountChunks = readInt16();
+        final int amountChunks = readInt16();
 
-        baseStream.skipBytes(amountChunks * (2 + 4)); // Skip header
+        skip(amountChunks * SIZEOF_OFFSET_TABLE_ENTRY); // Skip header
 
         for (int i = 0; i < amountChunks; i++) {
             lightSources.addAll(Arrays.asList(readChunk(regionX, regionZ, arrayCreator, toLightSource).item2));
@@ -75,24 +77,28 @@ public class VLDBInputStream implements Closeable {
     }
 
     public <L extends ICustomLightSource> Tuple<ChunkCoords, L[]> readChunk(int regionX, int regionZ, IntFunction<L[]> arrayCreator, ToLightSource<L> toLightSource) throws IOException {
-        short encodedCoords = readInt16();
-
-        int cx = ((encodedCoords & 0xFF00) >>> 8) + regionX * 32;
-        int cz = (encodedCoords & 0xFF) + regionZ * 32;
+        ChunkCoords chunkCoords = readEncodedChunkCoords(regionX, regionZ);
 
         int amountLightSources = readUInt24();
 
         L[] lightSources = arrayCreator.apply(amountLightSources);
 
         for (int j = 0; j < amountLightSources; j++) {
-            int coords = readInt16();
-            byte data = readByte();
+            int coords;
+
+            try {
+                coords = readInt16();
+            } catch (EOFException e) {
+                throw e;
+            }
+
+            int data = readByte();
             String material = readASCII();
 
-            IntPosition position = new IntPosition(
-                    cx * 16 + ((coords & 0xF000) >>> 12),
+            IntPosition position = chunkCoords.getRelative(
+                    ((coords & 0xF000) >>> 12),
                     (coords & 0x0FF0) >>> 4,
-                    cz * 16 + (coords & 0xF)
+                    (coords & 0xF)
             );
 
             int lightLevel = (data & 0xF0) >>> 4;
@@ -101,7 +107,7 @@ public class VLDBInputStream implements Closeable {
             lightSources[j] = toLightSource.toLightSource(position, lightLevel, migrated, material);
         }
 
-        return new Tuple<>(new ChunkCoords(cx, cz), lightSources);
+        return new Tuple<>(chunkCoords, lightSources);
     }
 
     public Map<ChunkCoords, Integer> readHeader(int regionX, int regionZ) throws IOException {
@@ -110,28 +116,38 @@ public class VLDBInputStream implements Closeable {
         final Map<ChunkCoords, Integer> header = new HashMap<>(amountChunks);
 
         for (int i = 0; i < amountChunks; i++) {
-            int encodedCoords = readInt16();
+            ChunkCoords chunkCoords = readEncodedChunkCoords(regionX, regionZ);
             int offset = readInt32();
 
-            int cx = ((encodedCoords & 0xFF00) >>> 8) + regionX * 32;
-            int cz = (encodedCoords & 0xFF) + regionZ * 32;
-
-            header.put(new ChunkCoords(cx, cz), offset);
+            header.put(chunkCoords, offset);
         }
 
         return header;
     }
 
-    public byte readByte() throws IOException {
-        return baseStream.readByte();
+    public ChunkCoords readEncodedChunkCoords(int regionX, int regionZ) throws IOException {
+        int encodedCoords = readInt16();
+
+        int cx = ((encodedCoords & 0xFF00) >>> 8) + regionX * 32;
+        int cz = (encodedCoords & 0xFF) + regionZ * 32;
+
+        return new ChunkCoords(cx, cz);
     }
 
-    public short readInt16() throws IOException {
-        return baseStream.readShort();
+    public void skip(int n) throws IOException {
+        baseStream.skipBytes(n);
+    }
+
+    public int readByte() throws IOException {
+        return Byte.toUnsignedInt(baseStream.readByte());
+    }
+
+    public int readInt16() throws IOException {
+        return baseStream.readUnsignedShort();
     }
 
     public int readUInt24() throws IOException {
-        return Byte.toUnsignedInt(readByte()) << 16 | Byte.toUnsignedInt(readByte()) << 8 | Byte.toUnsignedInt(readByte());
+        return readByte() << 16 | readByte() << 8 | readByte();
     }
 
     public int readInt32() throws IOException {
@@ -140,7 +156,10 @@ public class VLDBInputStream implements Closeable {
 
     public String readASCII() throws IOException {
         byte[] asciiBuffer = new byte[readInt16()];
-        baseStream.read(asciiBuffer);
+
+        if (baseStream.read(asciiBuffer, 0, asciiBuffer.length) != asciiBuffer.length) {
+            throw new EOFException();
+        }
 
         return StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(asciiBuffer)).toString();
     }

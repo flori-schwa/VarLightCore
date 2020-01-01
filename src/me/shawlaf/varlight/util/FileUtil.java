@@ -2,10 +2,7 @@ package me.shawlaf.varlight.util;
 
 import lombok.experimental.UtilityClass;
 
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.zip.GZIPInputStream;
 
 @UtilityClass
@@ -14,6 +11,31 @@ public class FileUtil {
         String path = file.getAbsolutePath();
 
         return path.substring(path.lastIndexOf('.'));
+    }
+
+    public static byte[] readFileFullyInflate(File file) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+        try (FileInputStream fis = new FileInputStream(file)) {
+            InputStream in;
+
+            if (isDeflated(file)) {
+                in = new GZIPInputStream(fis);
+            } else {
+                in = fis;
+            }
+
+            byte[] buffer = new byte[1024];
+            int read = 0;
+
+            while ((read = in.read(buffer, 0, buffer.length)) > 0) {
+                baos.write(buffer, 0, read);
+            }
+
+            in.close();
+        }
+
+        return baos.toByteArray();
     }
 
     public static boolean isDeflated(File file) throws IOException {

@@ -29,6 +29,10 @@ public class ChunkCoords {
         return ((z % 32) + 32) % 32;
     }
 
+    public IntPosition getRelative(int dx, int dy, int dz) {
+        return new IntPosition(this.x * 16 + dx, dy, this.z * 16 + dz);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

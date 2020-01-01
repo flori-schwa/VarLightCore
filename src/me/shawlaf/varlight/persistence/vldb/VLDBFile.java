@@ -12,7 +12,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import static java.util.Objects.requireNonNull;
@@ -398,26 +397,7 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
 
     private void readFileFully() throws IOException {
         synchronized (lock) {
-            InputStream in;
-            ByteArrayOutputStream baos;
-
-            if (FileUtil.isDeflated(file)) {
-                in = new GZIPInputStream(new FileInputStream(file));
-                baos = new ByteArrayOutputStream();
-            } else {
-                in = new FileInputStream(file);
-                baos = new ByteArrayOutputStream(Math.toIntExact(file.length()));
-            }
-
-            byte[] buffer = new byte[1024];
-            int read;
-
-            while ((read = in.read(buffer, 0, buffer.length)) > 0) {
-                baos.write(buffer, 0, read);
-            }
-
-            this.fileContents = baos.toByteArray();
-            in.close();
+            this.fileContents = FileUtil.readFileFullyInflate(file);
         }
     }
 
