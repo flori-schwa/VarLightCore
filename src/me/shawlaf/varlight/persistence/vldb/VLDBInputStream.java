@@ -139,7 +139,7 @@ public class VLDBInputStream implements Closeable {
     }
 
     public int readByte() throws IOException {
-        return Byte.toUnsignedInt(baseStream.readByte());
+        return baseStream.readUnsignedByte();
     }
 
     public int readInt16() throws IOException {
