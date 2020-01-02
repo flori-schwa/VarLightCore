@@ -1,12 +1,20 @@
 package me.shawlaf.varlight.util;
 
 import lombok.experimental.UtilityClass;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
+
+import static java.lang.Integer.parseInt;
 
 @UtilityClass
 public class FileUtil {
+
+    private static final Pattern FILENAME_PATTERN = Pattern.compile("^r\\.(-?\\d+)\\.(-?\\d+)\\..+$");
+
     public static String getExtension(File file) {
         String path = file.getAbsolutePath();
 
@@ -62,6 +70,17 @@ public class FileUtil {
         }
 
         return deflated;
+    }
+
+    @Nullable
+    public static RegionCoords parseRegionCoordsFromFileName(String fileName) {
+        Matcher matcher = FILENAME_PATTERN.matcher(fileName);
+
+        if (!matcher.matches()) {
+            return null;
+        }
+
+        return new RegionCoords(parseInt(matcher.group(1)), parseInt(matcher.group(2)));
     }
 
 }
