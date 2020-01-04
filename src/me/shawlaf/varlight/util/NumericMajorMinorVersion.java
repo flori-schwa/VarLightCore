@@ -1,5 +1,7 @@
 package me.shawlaf.varlight.util;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -24,6 +26,18 @@ public class NumericMajorMinorVersion implements Comparable<NumericMajorMinorVer
         } catch (NumberFormatException e) {
             throw forVersionString(version, e);
         }
+    }
+
+    public static @Nullable NumericMajorMinorVersion tryParse(String input) {
+        NumericMajorMinorVersion result = null;
+
+        try {
+            result = new NumericMajorMinorVersion(input);
+        } catch (IllegalArgumentException e) {
+            // Ignore
+        }
+
+        return result;
     }
 
     public static boolean isValid(String input) {
