@@ -6,14 +6,16 @@
     <property name="javac-source" value="8"/>
     <property name="javac-target" value="8"/>
 
+    <property name="dist" location="dist"/>
+
     <target name="clean">
         <delete dir="build"/>
-        <delete dir="dist"/>
+        <delete dir="${dist}"/>
     </target>
 
     <target name="init" depends="clean">
         <mkdir dir="build"/>
-        <mkdir dir="dist"/>
+        <mkdir dir="${dist}"/>
     </target>
 
     <target name="master" depends="init">
@@ -36,12 +38,12 @@
             </classpath>
         </javac>
 
-        <jar destfile="dist/VarLightCore-with-libs.jar" basedir="build">
+        <jar destfile="${dist}/VarLightCore-with-libs.jar" basedir="build">
             <zipgroupfileset dir="lib">
                 <include name="annotations-17.0.0.jar"/>
             </zipgroupfileset>
         </jar>
 
-        <jar destfile="dist/VarLightCore.jar" basedir="build"/>
+        <jar destfile="${dist}/VarLightCore.jar" basedir="build"/>
     </target>
 </project>
