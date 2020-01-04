@@ -8,13 +8,13 @@ import java.util.Objects;
 public class BasicCustomLightSource implements ICustomLightSource {
     @Getter private final IntPosition position;
     @Getter private final String type;
-    @Getter private final int customLuminance;
+    private final int emittingLight;
     @Getter private final boolean migrated;
 
-    public BasicCustomLightSource(IntPosition position, int customLuminance, boolean migrated, String type) {
+    public BasicCustomLightSource(IntPosition position, int emittingLight, boolean migrated, String type) {
         this.position = position;
         this.type = type;
-        this.customLuminance = customLuminance;
+        this.emittingLight = emittingLight;
         this.migrated = migrated;
     }
 
@@ -23,7 +23,7 @@ public class BasicCustomLightSource implements ICustomLightSource {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         BasicCustomLightSource that = (BasicCustomLightSource) o;
-        return customLuminance == that.customLuminance &&
+        return emittingLight == that.emittingLight &&
                 migrated == that.migrated &&
                 position.equals(that.position) &&
                 type.equals(that.type);
@@ -31,7 +31,12 @@ public class BasicCustomLightSource implements ICustomLightSource {
 
     @Override
     public int hashCode() {
-        return Objects.hash(position, type, customLuminance, migrated);
+        return Objects.hash(position, type, emittingLight, migrated);
+    }
+
+    @Override
+    public int getCustomLuminance() {
+        return emittingLight;
     }
 
     @Override
@@ -39,7 +44,7 @@ public class BasicCustomLightSource implements ICustomLightSource {
         return "BasicStoredLightSource{" +
                 "position=" + position +
                 ", type='" + type + '\'' +
-                ", emittingLight=" + customLuminance +
+                ", emittingLight=" + emittingLight +
                 ", migrated=" + migrated +
                 '}';
     }
