@@ -16,7 +16,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public final int regionX, regionZ;
 
     public final VLDBFile<L> file;
-    private final Map<ChunkCoords, List<L>> chunkCache = new HashMap<>();
+    private final Map<ChunkCoords, Map<ChunkOffsetPosition, L>> chunkCache = new HashMap<>();
 
     public RegionPersistor(@NotNull File vldbRoot, int regionX, int regionZ, boolean deflated) throws IOException {
         Objects.requireNonNull(vldbRoot);
@@ -71,9 +71,19 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         Objects.requireNonNull(chunkCoords);
 
         synchronized (chunkCache) {
+            L[] chunk;
+
             synchronized (file) {
-                chunkCache.put(chunkCoords, CollectionUtil.toList(file.readChunk(chunkCoords)));
+                chunk = file.readChunk(chunkCoords);
             }
+
+            Map<ChunkOffsetPosition, L> chunkMap = new HashMap<>();
+
+            for (L lightsource : chunk) {
+                chunkMap.put(new ChunkOffsetPosition(lightsource.getPosition()), lightsource);
+            }
+
+            chunkCache.put(chunkCoords, chunkMap);
         }
     }
 
@@ -89,7 +99,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         Objects.requireNonNull(chunkCoords);
 
         synchronized (chunkCache) {
-            List<L> toUnload = chunkCache.remove(chunkCoords);
+            Collection<L> toUnload = chunkCache.remove(chunkCoords).values();
 
             if (toUnload == null) { // There was no mapping for the chunk
                 return;
@@ -104,11 +114,13 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         List<L> chunk;
 
         synchronized (chunkCache) {
-            chunk = chunkCache.get(chunkCoords);
-        }
+            Map<ChunkOffsetPosition, L> chunkMap = chunkCache.get(chunkCoords);
 
-        if (chunk == null) {
-            return new ArrayList<>();
+            if (chunkMap == null) {
+                chunk = new ArrayList<>();
+            } else {
+                chunk = new ArrayList<>(chunkMap.values());
+            }
         }
 
         return Collections.unmodifiableList(chunk);
@@ -125,14 +137,8 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
                 loadChunk(chunkCoords);
             }
 
-            for (L lightSource : chunkCache.get(chunkCoords)) {
-                if (lightSource.getPosition().equals(position)) {
-                    return lightSource;
-                }
-            }
+            return chunkCache.get(chunkCoords).get(new ChunkOffsetPosition(position));
         }
-
-        return null;
     }
 
     public void put(@NotNull L lightSource) throws IOException {
@@ -160,13 +166,13 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
                 loadChunk(chunkCoords);
             }
 
-            if (chunkCache.get(chunkCoords).removeIf(l -> l.getPosition().equals(position))) {
-                List<L> chunk = chunkCache.get(chunkCoords);
+            if (chunkCache.get(chunkCoords).remove(new ChunkOffsetPosition(position)) != null) {
+                Map<ChunkOffsetPosition, L> chunk = chunkCache.get(chunkCoords);
 
                 if (chunk.size() == 0) {
                     file.removeChunk(chunkCoords);
                 } else {
-                    file.editChunk(chunkCoords, chunk.toArray(createArray(0)));
+                    file.editChunk(chunkCoords, chunk.values().toArray(createArray(0)));
                 }
             }
         }
@@ -206,7 +212,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         }
     }
 
-    private void flushChunk(ChunkCoords chunkCoords, List<L> lightData) throws IOException {
+    private void flushChunk(ChunkCoords chunkCoords, Collection<L> lightData) throws IOException {
         synchronized (file) {
             if (lightData.size() == 0) {
                 if (file.hasChunkData(chunkCoords)) {
@@ -226,7 +232,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
 
     private void flushChunk(ChunkCoords chunkCoords) throws IOException {
         synchronized (chunkCache) {
-            flushChunk(chunkCoords, chunkCache.get(chunkCoords));
+            flushChunk(chunkCoords, chunkCache.get(chunkCoords).values());
         }
     }
 
@@ -234,18 +240,19 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         Objects.requireNonNull(lightSource);
 
         ChunkCoords chunkCoords = lightSource.getPosition().toChunkCoords();
+        ChunkOffsetPosition offsetPosition = new ChunkOffsetPosition(lightSource.getPosition());
 
         synchronized (chunkCache) {
-            List<L> list = chunkCache.get(chunkCoords);
+            Map<ChunkOffsetPosition, L> map = chunkCache.get(chunkCoords);
 
-            if (list == null) {
+            if (map == null) {
                 throw new IllegalArgumentException("No Data present for chunk");
             }
 
-            list.removeIf(l -> l.getPosition().equals(lightSource.getPosition()));
+            map.remove(offsetPosition);
 
             if (lightSource.getCustomLuminance() > 0) {
-                list.add(lightSource);
+                map.put(offsetPosition, lightSource);
             }
         }
     }
@@ -260,5 +267,34 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         chunkCache.clear();
 
         file.unload();
+    }
+
+    private static class ChunkOffsetPosition {
+        public final int x, y, z;
+
+        public ChunkOffsetPosition(IntPosition position) {
+            this(position.x & 0xF, position.y, position.z & 0xF);
+        }
+
+        public ChunkOffsetPosition(int x, int y, int z) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ChunkOffsetPosition that = (ChunkOffsetPosition) o;
+            return x == that.x &&
+                    y == that.y &&
+                    z == that.z;
+        }
+
+        @Override
+        public int hashCode() {
+            return (x << 12) | (y << 4) | z;
+        }
     }
 }
