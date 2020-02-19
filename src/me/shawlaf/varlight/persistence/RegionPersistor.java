@@ -2,7 +2,6 @@ package me.shawlaf.varlight.persistence;
 
 import me.shawlaf.varlight.persistence.vldb.VLDBFile;
 import me.shawlaf.varlight.util.ChunkCoords;
-import me.shawlaf.varlight.util.CollectionUtil;
 import me.shawlaf.varlight.util.IntPosition;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -16,7 +15,11 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public final int regionX, regionZ;
 
     public final VLDBFile<L> file;
+
+    private final Object chunkLock = new Object();
+
     private final Map<ChunkCoords, Map<ChunkOffsetPosition, L>> chunkCache = new HashMap<>();
+    private final Set<ChunkCoords> dirtyChunks = new HashSet<>();
 
     public RegionPersistor(@NotNull File vldbRoot, int regionX, int regionZ, boolean deflated) throws IOException {
         Objects.requireNonNull(vldbRoot);
@@ -67,10 +70,20 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         }
     }
 
+    public void markDirty(IntPosition position) {
+        markDirty(position.toChunkCoords());
+    }
+
+    public void markDirty(ChunkCoords chunkCoords) {
+        synchronized (chunkLock) {
+            dirtyChunks.add(chunkCoords);
+        }
+    }
+
     public void loadChunk(@NotNull ChunkCoords chunkCoords) throws IOException {
         Objects.requireNonNull(chunkCoords);
 
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             L[] chunk;
 
             synchronized (file) {
@@ -90,7 +103,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public boolean isChunkLoaded(@NotNull ChunkCoords chunkCoords) {
         Objects.requireNonNull(chunkCoords);
 
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             return chunkCache.containsKey(chunkCoords);
         }
     }
@@ -98,14 +111,14 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public void unloadChunk(@NotNull ChunkCoords chunkCoords) throws IOException {
         Objects.requireNonNull(chunkCoords);
 
-        synchronized (chunkCache) {
-            Collection<L> toUnload = chunkCache.remove(chunkCoords).values();
+        synchronized (chunkLock) {
+            Map<ChunkOffsetPosition, L> toUnload = chunkCache.remove(chunkCoords);
 
             if (toUnload == null) { // There was no mapping for the chunk
                 return;
             }
 
-            flushChunk(chunkCoords, toUnload);
+            flushChunk(chunkCoords, toUnload.values());
         }
     }
 
@@ -113,7 +126,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public List<L> getCache(@NotNull ChunkCoords chunkCoords) {
         List<L> chunk;
 
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             Map<ChunkOffsetPosition, L> chunkMap = chunkCache.get(chunkCoords);
 
             if (chunkMap == null) {
@@ -132,7 +145,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
 
         ChunkCoords chunkCoords = position.toChunkCoords();
 
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             if (!chunkCache.containsKey(chunkCoords)) {
                 loadChunk(chunkCoords);
             }
@@ -146,7 +159,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
 
         ChunkCoords chunkCoords = lightSource.getPosition().toChunkCoords();
 
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             if (!chunkCache.containsKey(chunkCoords)) {
                 loadChunk(chunkCoords);
             }
@@ -161,27 +174,28 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
 
         ChunkCoords chunkCoords = position.toChunkCoords();
 
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             if (!chunkCache.containsKey(chunkCoords)) {
                 loadChunk(chunkCoords);
             }
 
             if (chunkCache.get(chunkCoords).remove(new ChunkOffsetPosition(position)) != null) {
-                Map<ChunkOffsetPosition, L> chunk = chunkCache.get(chunkCoords);
-
-                if (chunk.size() == 0) {
-                    file.removeChunk(chunkCoords);
-                } else {
-                    file.editChunk(chunkCoords, chunk.values().toArray(createArray(0)));
-                }
+//                Map<ChunkOffsetPosition, L> chunk = chunkCache.get(chunkCoords);
+//
+//                if (chunk.size() == 0) {
+//                    file.removeChunk(chunkCoords);
+//                } else {
+//                    file.editChunk(chunkCoords, chunk.values().toArray(createArray(0)));
+//                }
+                markDirty(chunkCoords);
             }
         }
     }
 
     public void flushAll() throws IOException {
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             synchronized (file) {
-                for (ChunkCoords key : chunkCache.keySet()) {
+                for (ChunkCoords key : dirtyChunks.toArray(new ChunkCoords[0])) {
                     flushChunk(key);
                 }
             }
@@ -196,7 +210,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
 
     public List<L> loadAll() throws IOException {
         synchronized (file) {
-            synchronized (chunkCache) {
+            synchronized (chunkLock) {
                 for (ChunkCoords chunkCoords : chunkCache.keySet()) {
                     flushChunk(chunkCoords);
                 }
@@ -213,25 +227,31 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     }
 
     private void flushChunk(ChunkCoords chunkCoords, Collection<L> lightData) throws IOException {
-        synchronized (file) {
-            if (lightData.size() == 0) {
-                if (file.hasChunkData(chunkCoords)) {
-                    file.removeChunk(chunkCoords);
-                }
-
+        synchronized (chunkLock) {
+            if (!dirtyChunks.contains(chunkCoords)) {
                 return;
             }
 
-            if (!file.hasChunkData(chunkCoords)) {
-                file.insertChunk(lightData.toArray(createArray(0)));
-            } else {
-                file.editChunk(chunkCoords, lightData.toArray(createArray(0)));
+            synchronized (file) {
+                if (lightData.size() == 0) {
+                    if (file.hasChunkData(chunkCoords)) {
+                        file.removeChunk(chunkCoords);
+                    }
+
+                    chunkCache.remove(chunkCoords);
+                } else if (!file.hasChunkData(chunkCoords)) {
+                    file.insertChunk(lightData.toArray(createArray(0)));
+                } else {
+                    file.editChunk(chunkCoords, lightData.toArray(createArray(0)));
+                }
             }
+
+            dirtyChunks.remove(chunkCoords);
         }
     }
 
     private void flushChunk(ChunkCoords chunkCoords) throws IOException {
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             flushChunk(chunkCoords, chunkCache.get(chunkCoords).values());
         }
     }
@@ -242,17 +262,23 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         ChunkCoords chunkCoords = lightSource.getPosition().toChunkCoords();
         ChunkOffsetPosition offsetPosition = new ChunkOffsetPosition(lightSource.getPosition());
 
-        synchronized (chunkCache) {
+        synchronized (chunkLock) {
             Map<ChunkOffsetPosition, L> map = chunkCache.get(chunkCoords);
 
             if (map == null) {
                 throw new IllegalArgumentException("No Data present for chunk");
             }
 
-            map.remove(offsetPosition);
+            L removed = map.remove(offsetPosition);
 
             if (lightSource.getCustomLuminance() > 0) {
                 map.put(offsetPosition, lightSource);
+
+                markDirty(chunkCoords);
+            } else {
+                if (removed != null) {
+                    markDirty(chunkCoords);
+                }
             }
         }
     }
@@ -265,6 +291,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
 
     public void unload() {
         chunkCache.clear();
+        dirtyChunks.clear();
 
         file.unload();
     }
