@@ -20,6 +20,14 @@ public class IntPosition implements Comparable<IntPosition> {
         this.z = z;
     }
 
+    public int getChunkRelativeX() {
+        return x & 0xF;
+    }
+
+    public int getChunkRelativeZ() {
+        return z & 0xF;
+    }
+
     public int getChunkX() {
         return x >> 4;
     }

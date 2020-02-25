@@ -12,14 +12,18 @@ import java.util.*;
 
 public abstract class RegionPersistor<L extends ICustomLightSource> {
 
+    private static final int REGION_SIZE = 32;
+    private static final int CHUNK_SIZE = 16 * 16 * 256;
+
     public final int regionX, regionZ;
 
     public final VLDBFile<L> file;
 
     private final Object chunkLock = new Object();
 
-    private final Map<ChunkCoords, Map<ChunkOffsetPosition, L>> chunkCache = new HashMap<>();
-    private final Set<ChunkCoords> dirtyChunks = new HashSet<>();
+    private final L[][] chunkCache = createMultiArr(REGION_SIZE * REGION_SIZE);
+    private final int[] chunkSizes = new int[REGION_SIZE * REGION_SIZE];
+    private final List<ChunkCoords> dirtyChunks = new ArrayList<>(REGION_SIZE * REGION_SIZE);
 
     public RegionPersistor(@NotNull File vldbRoot, int regionX, int regionZ, boolean deflated) throws IOException {
         Objects.requireNonNull(vldbRoot);
@@ -83,6 +87,8 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public void loadChunk(@NotNull ChunkCoords chunkCoords) throws IOException {
         Objects.requireNonNull(chunkCoords);
 
+        final int chunkIndex = chunkIndex(chunkCoords);
+
         synchronized (chunkLock) {
             L[] chunk;
 
@@ -90,13 +96,14 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
                 chunk = file.readChunk(chunkCoords);
             }
 
-            Map<ChunkOffsetPosition, L> chunkMap = new HashMap<>();
+            L[] chunkArray = createArray(CHUNK_SIZE);
 
             for (L lightsource : chunk) {
-                chunkMap.put(new ChunkOffsetPosition(lightsource.getPosition()), lightsource);
+                chunkArray[indexOf(lightsource.getPosition())] = lightsource;
             }
 
-            chunkCache.put(chunkCoords, chunkMap);
+            chunkSizes[chunkIndex] = chunk.length;
+            chunkCache[chunkIndex] = chunkArray;
         }
     }
 
@@ -104,21 +111,26 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         Objects.requireNonNull(chunkCoords);
 
         synchronized (chunkLock) {
-            return chunkCache.containsKey(chunkCoords);
+            return chunkCache[chunkIndex(chunkCoords)] != null;
         }
     }
 
     public void unloadChunk(@NotNull ChunkCoords chunkCoords) throws IOException {
         Objects.requireNonNull(chunkCoords);
 
+        final int chunkIndex = chunkIndex(chunkCoords);
+
         synchronized (chunkLock) {
-            Map<ChunkOffsetPosition, L> toUnload = chunkCache.remove(chunkCoords);
+            L[] toUnload = chunkCache[chunkIndex];
 
             if (toUnload == null) { // There was no mapping for the chunk
                 return;
             }
 
-            flushChunk(chunkCoords, toUnload.values());
+            flushChunk(chunkCoords, getNonNullFromChunk(chunkCoords));
+
+            chunkSizes[chunkIndex] = 0;
+            chunkCache[chunkIndex] = null;
         }
     }
 
@@ -127,12 +139,12 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
         List<L> chunk;
 
         synchronized (chunkLock) {
-            Map<ChunkOffsetPosition, L> chunkMap = chunkCache.get(chunkCoords);
+            L[] chunkArray = chunkCache[chunkIndex(chunkCoords)];
 
-            if (chunkMap == null) {
+            if (chunkArray == null) {
                 chunk = new ArrayList<>();
             } else {
-                chunk = new ArrayList<>(chunkMap.values());
+                chunk = Arrays.asList(chunkArray);
             }
         }
 
@@ -143,24 +155,26 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public L getLightSource(@NotNull IntPosition position) throws IOException {
         Objects.requireNonNull(position);
 
-        ChunkCoords chunkCoords = position.toChunkCoords();
+        final ChunkCoords chunkCoords = position.toChunkCoords();
+        final int chunkIndex = chunkIndex(chunkCoords);
 
         synchronized (chunkLock) {
-            if (!chunkCache.containsKey(chunkCoords)) {
+            if (chunkCache[chunkIndex] == null) {
                 loadChunk(chunkCoords);
             }
 
-            return chunkCache.get(chunkCoords).get(new ChunkOffsetPosition(position));
+            return chunkCache[chunkIndex][indexOf(position)];
         }
     }
 
     public void put(@NotNull L lightSource) throws IOException {
         Objects.requireNonNull(lightSource);
 
-        ChunkCoords chunkCoords = lightSource.getPosition().toChunkCoords();
+        final ChunkCoords chunkCoords = lightSource.getPosition().toChunkCoords();
+        final int chunkIndex = chunkIndex(chunkCoords);
 
         synchronized (chunkLock) {
-            if (!chunkCache.containsKey(chunkCoords)) {
+            if (chunkCache[chunkIndex] == null) {
                 loadChunk(chunkCoords);
             }
 
@@ -172,21 +186,21 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public void removeLightSource(@NotNull IntPosition position) throws IOException {
         Objects.requireNonNull(position);
 
-        ChunkCoords chunkCoords = position.toChunkCoords();
+        final ChunkCoords chunkCoords = position.toChunkCoords();
+        final int chunkIndex = chunkIndex(chunkCoords);
+        final int index = indexOf(position);
 
         synchronized (chunkLock) {
-            if (!chunkCache.containsKey(chunkCoords)) {
+            if (chunkCache[chunkIndex] == null) {
                 loadChunk(chunkCoords);
             }
 
-            if (chunkCache.get(chunkCoords).remove(new ChunkOffsetPosition(position)) != null) {
-//                Map<ChunkOffsetPosition, L> chunk = chunkCache.get(chunkCoords);
-//
-//                if (chunk.size() == 0) {
-//                    file.removeChunk(chunkCoords);
-//                } else {
-//                    file.editChunk(chunkCoords, chunk.values().toArray(createArray(0)));
-//                }
+            L[] chunkArray = chunkCache[chunkIndex];
+
+            if (chunkArray[index] != null) {
+                chunkArray[index] = null;
+                --chunkSizes[chunkIndex(chunkCoords)];
+
                 markDirty(chunkCoords);
             }
         }
@@ -211,8 +225,14 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public List<L> loadAll() throws IOException {
         synchronized (file) {
             synchronized (chunkLock) {
-                for (ChunkCoords chunkCoords : chunkCache.keySet()) {
-                    flushChunk(chunkCoords);
+                int cx, cz;
+
+                for (int z = 0; z < REGION_SIZE; ++z) {
+                    for (int x = 0; x < REGION_SIZE; ++x) {
+                        if (chunkCache[chunkIndex(cx = regionX + x, cz = regionZ + z)] != null) {
+                            flushChunk(new ChunkCoords(cx, cz));
+                        }
+                    }
                 }
 
                 return file.readAll();
@@ -227,6 +247,8 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     }
 
     private void flushChunk(ChunkCoords chunkCoords, Collection<L> lightData) throws IOException {
+        final int chunkIndex = chunkIndex(chunkCoords);
+
         synchronized (chunkLock) {
             if (!dirtyChunks.contains(chunkCoords)) {
                 return;
@@ -238,7 +260,8 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
                         file.removeChunk(chunkCoords);
                     }
 
-                    chunkCache.remove(chunkCoords);
+                    chunkCache[chunkIndex] = null;
+                    chunkSizes[chunkIndex] = 0;
                 } else if (!file.hasChunkData(chunkCoords)) {
                     file.insertChunk(lightData.toArray(createArray(0)));
                 } else {
@@ -252,76 +275,108 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
 
     private void flushChunk(ChunkCoords chunkCoords) throws IOException {
         synchronized (chunkLock) {
-            flushChunk(chunkCoords, chunkCache.get(chunkCoords).values());
+            flushChunk(chunkCoords, getNonNullFromChunk(chunkCoords));
         }
     }
 
     private void putInternal(L lightSource) {
         Objects.requireNonNull(lightSource);
 
-        ChunkCoords chunkCoords = lightSource.getPosition().toChunkCoords();
-        ChunkOffsetPosition offsetPosition = new ChunkOffsetPosition(lightSource.getPosition());
+        final ChunkCoords chunkCoords = lightSource.getPosition().toChunkCoords();
+        final int chunkIndex = chunkIndex(chunkCoords);
+        final int index = indexOf(lightSource.getPosition());
 
         synchronized (chunkLock) {
-            Map<ChunkOffsetPosition, L> map = chunkCache.get(chunkCoords);
+            L[] chunkArray = chunkCache[chunkIndex];
 
-            if (map == null) {
+            if (chunkArray == null) {
                 throw new IllegalArgumentException("No Data present for chunk");
             }
 
-            L removed = map.remove(offsetPosition);
+            L removed = chunkArray[index];
+            chunkArray[index] = null;
 
-            if (lightSource.getCustomLuminance() > 0) {
-                map.put(offsetPosition, lightSource);
+            if (lightSource.getCustomLuminance() > 0) { // New or modified
+                chunkArray[index] = lightSource;
+
+                if (removed == null) {
+                    ++chunkSizes[chunkIndex]; // One new light source added
+                }
+
+                // When a light source was modified, aka removed != null, then the amount of Light sources stays the same
 
                 markDirty(chunkCoords);
-            } else {
+            } else { // Removed, or no-op
                 if (removed != null) {
                     markDirty(chunkCoords);
+                    --chunkSizes[chunkIndex]; // One Light source was removed
                 }
             }
         }
+    }
+
+    private Collection<L> getNonNullFromChunk(ChunkCoords chunkCoords) {
+        final int chunkIndex = chunkIndex(chunkCoords);
+
+        synchronized (chunkLock) {
+            int chunkSize = chunkSizes[chunkIndex];
+
+            List<L> list = new ArrayList<>(chunkSize);
+            L[] rawArr = chunkCache[chunkIndex];
+
+            if (rawArr == null || rawArr.length == 0) {
+                return list; // Will have size 0
+            }
+
+            int added = 0;
+
+            for (L l : rawArr) {
+                if (l == null) {
+                    continue;
+                }
+
+                list.add(l);
+
+                if (++added == chunkSize) {
+                    break;
+                }
+            }
+
+            return list;
+        }
+    }
+
+    private int indexOf(IntPosition position) {
+        return indexOf(position.getChunkRelativeX(), position.y, position.getChunkRelativeZ());
+    }
+
+    private int indexOf(int x, int y, int z) {
+        return (y << 8) | (z << 4) | x;
+    }
+
+    private int chunkIndex(ChunkCoords chunkCoords) {
+        return chunkIndex(chunkCoords.getRegionRelativeX(), chunkCoords.getRegionRelativeZ());
+    }
+
+    private int chunkIndex(int cx, int cz) {
+        return cz << 5 | cx;
     }
 
     @NotNull
     protected abstract L[] createArray(int size);
 
     @NotNull
+    protected abstract L[][] createMultiArr(int size);
+
+    @NotNull
     protected abstract L createInstance(IntPosition position, int lightLevel, boolean migrated, String material);
 
     public void unload() {
-        chunkCache.clear();
+        Arrays.fill(chunkCache, null);
+        Arrays.fill(chunkSizes, 0);
+
         dirtyChunks.clear();
 
         file.unload();
-    }
-
-    private static class ChunkOffsetPosition {
-        public final int x, y, z;
-
-        public ChunkOffsetPosition(IntPosition position) {
-            this(position.x & 0xF, position.y, position.z & 0xF);
-        }
-
-        public ChunkOffsetPosition(int x, int y, int z) {
-            this.x = x;
-            this.y = y;
-            this.z = z;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            ChunkOffsetPosition that = (ChunkOffsetPosition) o;
-            return x == that.x &&
-                    y == that.y &&
-                    z == that.z;
-        }
-
-        @Override
-        public int hashCode() {
-            return (x << 12) | (y << 4) | z;
-        }
     }
 }
