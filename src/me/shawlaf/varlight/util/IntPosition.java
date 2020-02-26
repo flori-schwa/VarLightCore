@@ -100,6 +100,10 @@ public class IntPosition implements Comparable<IntPosition> {
                 '}';
     }
 
+    public String toShortString() {
+        return String.format("[%d, %d, %d]", x, y, z);
+    }
+
     @Override
     public int compareTo(@NotNull IntPosition o) {
         return Integer.compare(this.manhattanDistance(ORIGIN), o.manhattanDistance(ORIGIN));

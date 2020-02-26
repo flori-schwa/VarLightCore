@@ -55,6 +55,10 @@ public class ChunkCoords {
                 '}';
     }
 
+    public String toShortString() {
+        return String.format("[%d, %d]", x, z);
+    }
+
     public RegionCoords toRegionCoords() {
         return new RegionCoords(getRegionX(), getRegionZ());
     }
