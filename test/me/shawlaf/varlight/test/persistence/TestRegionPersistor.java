@@ -3,7 +3,6 @@ package me.shawlaf.varlight.test.persistence;
 import me.shawlaf.varlight.persistence.BasicCustomLightSource;
 import me.shawlaf.varlight.persistence.RegionPersistor;
 import me.shawlaf.varlight.persistence.vldb.VLDBFile;
-import me.shawlaf.varlight.persistence.vldb.VLDBInputStream;
 import me.shawlaf.varlight.persistence.vldb.VLDBOutputStream;
 import me.shawlaf.varlight.util.IntPosition;
 import org.jetbrains.annotations.NotNull;
@@ -12,11 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -56,19 +53,7 @@ public class TestRegionPersistor {
 
                 File saveFile = new File(tempDir, String.format(VLDBFile.FILE_NAME_FORMAT, rx, rz));
 
-                assertTrue(saveFile.exists());
-
-                try (FileInputStream fis = new FileInputStream(saveFile)) {
-                    VLDBInputStream vis = new VLDBInputStream(new GZIPInputStream(fis));
-
-                    vis.readVLDBMagic();
-
-                    assertEquals(rx, vis.readInt32());
-                    assertEquals(rz, vis.readInt32());
-                    assertEquals(0, vis.readInt16());
-
-                    assertEquals(0, fis.available());
-                }
+                assertFalse(saveFile.exists()); // Behaviour was changed, if no actual light data exists, nothing will be written to disk
             }
         }
 

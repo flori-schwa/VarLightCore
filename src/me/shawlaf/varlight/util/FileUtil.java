@@ -21,6 +21,16 @@ public class FileUtil {
         return path.substring(path.lastIndexOf('.'));
     }
 
+    public static InputStream openStreamInflate(File file) throws IOException {
+        FileInputStream fis = new FileInputStream(file);
+
+        if (isDeflated(file)) {
+            return new GZIPInputStream(fis);
+        } else {
+            return fis;
+        }
+    }
+
     public static byte[] readFileFullyInflate(File file) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 

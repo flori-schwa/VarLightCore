@@ -54,6 +54,58 @@ public class VLDBInputStream implements Closeable {
         return isVLDB;
     }
 
+    public static byte[] readHeaderRaw(InputStream inputStream) throws IOException {
+        VLDBInputStream in = new VLDBInputStream(inputStream);
+
+        if (!in.readVLDBMagic()) {
+            throw new IllegalStateException("VLDB Magic not found");
+        }
+
+        int regionX = in.readInt32();
+        int regionZ = in.readInt32();
+
+        int amountChunks = in.readInt16();
+
+        byte[] offsetTable = in.readBytes(VLDBUtil.sizeofOffsetTable(amountChunks));
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(VLDBUtil.sizeofHeader(amountChunks));
+
+        try (VLDBOutputStream out = new VLDBOutputStream(baos)) {
+            out.writeInt32(VLDB_MAGIC);
+            out.writeInt32(regionX);
+            out.writeInt32(regionZ);
+
+            out.writeInt16(amountChunks);
+
+            out.write(offsetTable, 0, offsetTable.length);
+        }
+
+        return baos.toByteArray();
+    }
+
+    public static byte[] readChunkRaw(InputStream inputStream) throws IOException {
+        VLDBInputStream in = new VLDBInputStream(inputStream);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+        try (VLDBOutputStream out = new VLDBOutputStream(baos)) {
+            out.writeInt16(in.readInt16()); // Chunk coords in region
+
+            int lightSources = in.readUInt24();
+            out.writeUInt24(lightSources);
+
+            for (int i = 0; i < lightSources; i++) {
+                out.write(in.readBytes(3), 0, 3); // Position in chunk and light data
+
+                int asciiLen = in.readInt16();
+
+                out.writeInt16(asciiLen);
+                out.write(in.readBytes(asciiLen), 0, asciiLen);
+            }
+        }
+
+        return baos.toByteArray();
+    }
+
     public boolean readVLDBMagic() throws IOException {
         return readInt32() == VLDB_MAGIC;
     }
@@ -154,14 +206,24 @@ public class VLDBInputStream implements Closeable {
         return baseStream.readInt();
     }
 
-    public String readASCII() throws IOException {
-        byte[] asciiBuffer = new byte[readInt16()];
+    public byte[] readBytes(int amount) throws IOException {
+        byte[] ret = new byte[amount];
+        int read = 0, written = 0;
 
-        if (baseStream.read(asciiBuffer, 0, asciiBuffer.length) != asciiBuffer.length) {
-            throw new EOFException();
+        while (written < amount) {
+            read = baseStream.read(ret, written, amount - written);
+            written += read;
+
+            if (read == -1) {
+                throw new EOFException();
+            }
         }
 
-        return StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(asciiBuffer)).toString();
+        return ret;
+    }
+
+    public String readASCII() throws IOException {
+        return StandardCharsets.US_ASCII.decode(ByteBuffer.wrap(readBytes(readInt16()))).toString();
     }
 
     @FunctionalInterface

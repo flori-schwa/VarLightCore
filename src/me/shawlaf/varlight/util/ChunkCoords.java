@@ -18,7 +18,7 @@ public class ChunkCoords {
     }
 
     public int getRegionRelativeX() {
-        return ((x % 32) + 32) % 32;
+        return MathUtil.modulo(x, 32);
     }
 
     public int getRegionZ() {
@@ -26,7 +26,7 @@ public class ChunkCoords {
     }
 
     public int getRegionRelativeZ() {
-        return ((z % 32) + 32) % 32;
+        return MathUtil.modulo(z, 32);
     }
 
     public IntPosition getRelative(int dx, int dy, int dz) {
@@ -65,5 +65,9 @@ public class ChunkCoords {
 
     public RegionCoords toRegionCoords() {
         return new RegionCoords(getRegionX(), getRegionZ());
+    }
+
+    public ChunkSectionPosition toChunkSectionPosition(int y) {
+        return new ChunkSectionPosition(this, y);
     }
 }

@@ -291,7 +291,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     public void flushAll() throws IOException {
         synchronized (chunkLock) {
             synchronized (file) {
-                for (ChunkCoords key : dirtyChunks.toArray(new ChunkCoords[0])) {
+                for (ChunkCoords key : dirtyChunks.toArray(new ChunkCoords[dirtyChunks.size()])) {
                     flushChunk(key);
                 }
             }
@@ -303,7 +303,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
      */
     public List<ChunkCoords> getAffectedChunks() {
         synchronized (file) {
-            return new ArrayList<>(file.getOffsetTable().keySet());
+            return file.getChunksWithData();
         }
     }
 
@@ -372,11 +372,9 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
 
                     chunkCache[chunkIndex] = null;
                     chunkSizes[chunkIndex] = 0;
-                } else if (!file.hasChunkData(chunkCoords)) {
-                    file.insertChunk(lightData.toArray(createArray(0)));
-                } else {
-                    file.editChunk(chunkCoords, lightData.toArray(createArray(0)));
                 }
+
+                file.putChunk(lightData.toArray(createArray(lightData.size())));
             }
 
             dirtyChunks.remove(chunkCoords);

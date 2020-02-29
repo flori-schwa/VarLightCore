@@ -48,6 +48,10 @@ public class IntPosition implements Comparable<IntPosition> {
         return y < 0 || y > 255;
     }
 
+    public ChunkSectionPosition getChunkSection() {
+        return new ChunkSectionPosition(getChunkX(), y >> 4, getChunkZ());
+    }
+
     public int manhattanDistance(IntPosition other) {
         Objects.requireNonNull(other);
 

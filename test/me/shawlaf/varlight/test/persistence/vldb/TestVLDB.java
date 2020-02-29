@@ -1,11 +1,13 @@
-package me.shawlaf.varlight.test.persistence;
+package me.shawlaf.varlight.test.persistence.vldb;
 
 import me.shawlaf.varlight.persistence.BasicCustomLightSource;
 import me.shawlaf.varlight.persistence.vldb.VLDBFile;
 import me.shawlaf.varlight.persistence.vldb.VLDBInputStream;
 import me.shawlaf.varlight.persistence.vldb.VLDBOutputStream;
 import me.shawlaf.varlight.util.ChunkCoords;
+import me.shawlaf.varlight.util.FileUtil;
 import me.shawlaf.varlight.util.IntPosition;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -300,7 +302,7 @@ public class TestVLDB {
 
             // region with 2,2 (testing insertChunk)
 
-            vldbFile.insertChunk(chunk22);
+            vldbFile.putChunk(chunk22);
 
             assertTrue(vldbFile.hasChunkData(0, 0));
             assertTrue(vldbFile.hasChunkData(1, 0));
@@ -362,7 +364,7 @@ public class TestVLDB {
 
             // region Editing 0,1 with different length
 
-            vldbFile.editChunk(new ChunkCoords(0, 1), edited01DifferentLength);
+            vldbFile.putChunk(edited01DifferentLength);
 
             assertTrue(vldbFile.hasChunkData(0, 0));
             assertFalse(vldbFile.hasChunkData(1, 0));
@@ -391,7 +393,7 @@ public class TestVLDB {
 
             // region Editing 0,1 with same length
 
-            vldbFile.editChunk(new ChunkCoords(0, 1), edited01SameLength);
+            vldbFile.putChunk(edited01SameLength);
 
             assertTrue(vldbFile.hasChunkData(0, 0));
             assertFalse(vldbFile.hasChunkData(1, 0));
@@ -418,70 +420,22 @@ public class TestVLDB {
 
             // endregion
 
-            // region testing save
-
-            vldbFile.save();
-
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-
-            try (GZIPInputStream in = new GZIPInputStream(new FileInputStream(vldbFile.file))) {
-                byte[] buffer = new byte[1024];
-                int read = 0;
-
-                while ((read = in.read(buffer)) > 0) {
-                    baos.write(buffer, 0, read);
-                }
-            }
-
-            assertArrayEquals(vldbFile.fileContents, baos.toByteArray());
-            // endregion
-
             // region testing bad input for insertChunk
 
             assertThrows(IllegalArgumentException.class,
-                    () -> vldbFile.insertChunk(new BasicCustomLightSource[0])
+                    () -> vldbFile.putChunk(new BasicCustomLightSource[0])
             );
 
             assertThrows(IllegalArgumentException.class,
-                    () -> vldbFile.insertChunk(new BasicCustomLightSource[]{
+                    () -> vldbFile.putChunk(new BasicCustomLightSource[]{
                             new BasicCustomLightSource(new IntPosition(5 * 16 + 1, 0, 5 * 16 + 1), 15, true, "STONE"),
                             new BasicCustomLightSource(new IntPosition(6 * 16 + 1, 0, 5 * 16 + 1), 15, true, "STONE"),
                     })
             );
 
             assertThrows(IllegalArgumentException.class,
-                    () -> vldbFile.insertChunk(new BasicCustomLightSource[]{
+                    () -> vldbFile.putChunk(new BasicCustomLightSource[]{
                             new BasicCustomLightSource(new IntPosition(-1, 0, -1), 15, true, "STONE")
-                    })
-            );
-
-            assertThrows(IllegalStateException.class,
-                    () -> vldbFile.insertChunk(new BasicCustomLightSource[]{
-                            new BasicCustomLightSource(IntPosition.ORIGIN, 15, true, "STONE")
-                    })
-            );
-
-            // endregion
-
-            // region testing bad input for editChunk
-
-//            assertThrows(IllegalArgumentException.class, () -> vldbFile.editChunk(ChunkCoords.ORIGIN, new BasicCustomLightSource[0]));
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> vldbFile.editChunk(new ChunkCoords(-1, -1), new BasicCustomLightSource[]{
-                            new BasicCustomLightSource(new IntPosition(-1, 0, -1), 15, true, "STONE")
-                    })
-            );
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> vldbFile.editChunk(ChunkCoords.ORIGIN, new BasicCustomLightSource[]{
-                            new BasicCustomLightSource(new IntPosition(1000, 0, 0), 15, true, "STONE")
-                    })
-            );
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> vldbFile.editChunk(new ChunkCoords(3, 3), new BasicCustomLightSource[]{
-                            new BasicCustomLightSource(new IntPosition(3 * 16 + 1, 0, 3 * 16 + 1), 15, true, "STONE")
                     })
             );
 
@@ -503,5 +457,57 @@ public class TestVLDB {
         } catch (IOException e) {
             fail("Something went wrong", e);
         }
+    }
+
+    @Test
+    public void testSave(@TempDir File testDir) throws IOException {
+        VLDBFile<BasicCustomLightSource> file = new VLDBFile<BasicCustomLightSource>(new File(testDir, "r.0.0.vldb2"), 0, 0, false) {
+            @NotNull
+            @Override
+            protected BasicCustomLightSource[] createArray(int size) {
+                return new BasicCustomLightSource[size];
+            }
+
+            @NotNull
+            @Override
+            protected BasicCustomLightSource createInstance(IntPosition position, int lightLevel, boolean migrated, String material) {
+                return new BasicCustomLightSource(position, lightLevel, migrated, material);
+            }
+        };
+
+        file.putChunk(new BasicCustomLightSource[] {
+                new BasicCustomLightSource(IntPosition.ORIGIN, 15, true, "minecraft:stone")
+        });
+
+        file.save();
+
+        byte[] expected = new byte[] {
+                // Begin Header
+                0x56, 0x4C, 0x44, 0x42, // Magic
+                0x00, 0x00, 0x00, 0x00, // region X
+                0x00, 0x00, 0x00, 0x00, // region Z
+                0x00, 0x01, // Amount Chunks
+                // Begin Offset table
+                0x00, 0x00, // Chunk Coordinates
+                0x00, 0x00, 0x00, 0x14, // Offset
+                // End Offset table
+                // End Header
+
+                // Begin Chunk
+                0x00, 0x00, //Chunk Coordinates
+                0x00, 0x00, 0x01, // Amount Light sources
+
+                // Begin Light source
+                0x00, 0x00, // Light source coordinates
+                (byte) 0xF1, // Light Data
+                0x00, 0xF, // Length of ASCII
+                'm', 'i', 'n', 'e', 'c', 'r', 'a', 'f', 't', ':', 's', 't', 'o', 'n', 'e'
+                // End Light source,
+                // End Chunk
+        };
+
+        assertArrayEquals(expected, FileUtil.readFileFullyInflate(file.file));
+
+
     }
 }

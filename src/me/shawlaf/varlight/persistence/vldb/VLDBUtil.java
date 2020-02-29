@@ -23,7 +23,11 @@ public class VLDBUtil {
     }
 
     public static int sizeofHeader(int amountChunks) {
-        return SIZEOF_HEADER_WITHOUT_OFFSET_TABLE + (amountChunks * SIZEOF_OFFSET_TABLE_ENTRY);
+        return SIZEOF_HEADER_WITHOUT_OFFSET_TABLE + sizeofOffsetTable(amountChunks);
+    }
+
+    public static int sizeofOffsetTable(int amountChunks) {
+        return amountChunks * SIZEOF_OFFSET_TABLE_ENTRY;
     }
 
     public static int sizeofChunk(ICustomLightSource[] chunk) {

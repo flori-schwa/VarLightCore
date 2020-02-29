@@ -6,16 +6,18 @@ import me.shawlaf.varlight.util.FileUtil;
 import me.shawlaf.varlight.util.IntPosition;
 import me.shawlaf.varlight.util.Tuple;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.zip.GZIPOutputStream;
 
 import static java.util.Objects.requireNonNull;
-import static me.shawlaf.varlight.persistence.vldb.VLDBUtil.*;
+import static me.shawlaf.varlight.persistence.vldb.VLDBUtil.SIZEOF_INT32;
+import static me.shawlaf.varlight.persistence.vldb.VLDBUtil.SIZEOF_MAGIC;
 
 public abstract class VLDBFile<L extends ICustomLightSource> {
 
@@ -24,8 +26,8 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
     private final Object lock = new Object();
     private final int regionX, regionZ;
     private final boolean deflate;
-    public byte[] fileContents;
-    private Map<ChunkCoords, Integer> offsetTable;
+    private byte[][] chunks = new byte[32 * 32][];
+    private int nonEmptyChunks = 0;
 
     private boolean modified = false;
 
@@ -33,21 +35,8 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
         this.file = requireNonNull(file);
         this.deflate = deflate;
 
-        synchronized (lock) {
-            this.regionX = regionX;
-            this.regionZ = regionZ;
-
-            this.offsetTable = new HashMap<>();
-
-            Tuple<ByteArrayOutputStream, VLDBOutputStream> out = outToMemory(sizeofHeader(0));
-
-            out.item2.writeHeader(regionX, regionZ, offsetTable);
-            out.item2.close();
-
-            this.fileContents = out.item1.toByteArray();
-
-            this.modified = true;
-        }
+        this.regionX = regionX;
+        this.regionZ = regionZ;
     }
 
     public VLDBFile(@NotNull File file, boolean deflate) throws IOException {
@@ -55,16 +44,34 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
         this.deflate = deflate;
 
         synchronized (lock) {
-            readFileFully();
+            try (InputStream stream = FileUtil.openStreamInflate(file)) {
+                byte[] header = VLDBInputStream.readHeaderRaw(stream);
 
-            VLDBInputStream headerReader = in();
+                try (VLDBInputStream in = new VLDBInputStream(new ByteArrayInputStream(header))) {
+                    in.skip(SIZEOF_MAGIC);
 
-            this.offsetTable = headerReader.readHeader(
-                    this.regionX = headerReader.readInt32(),
-                    this.regionZ = headerReader.readInt32()
-            );
+                    this.regionX = in.readInt32();
+                    this.regionZ = in.readInt32();
+                }
 
-            headerReader.close();
+                int amountChunks = ((int) header[3 * SIZEOF_INT32]) << 8 | ((int) header[3 * SIZEOF_INT32 + 1]);
+
+                for (int i = 0; i < amountChunks; ++i) {
+                    byte[] chunkData = VLDBInputStream.readChunkRaw(stream);
+
+                    int x = chunkData[0];
+                    int z = chunkData[1];
+
+                    int chunkIndex = chunkIndex(x, z);
+
+                    if (this.chunks[chunkIndex] != null) {
+                        throw new IllegalStateException(String.format("Duplicate Chunk data for Chunk [%d, %d] in file %s", x, z, file.getAbsolutePath()));
+                    }
+
+                    this.chunks[chunkIndex(x, z)] = chunkData;
+                    ++nonEmptyChunks;
+                }
+            }
         }
     }
 
@@ -91,8 +98,23 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
         return true;
     }
 
-    public Map<ChunkCoords, Integer> getOffsetTable() {
-        return Collections.unmodifiableMap(offsetTable);
+    public List<ChunkCoords> getChunksWithData() {
+        synchronized (lock) {
+            List<ChunkCoords> list = new ArrayList<>(nonEmptyChunks);
+
+            for (int i = 0; i < chunks.length; ++i) {
+                if (chunks[i] == null) {
+                    continue;
+                }
+
+                int cx = i >> 5;
+                int cz = i & 0x1F;
+
+                list.add(new ChunkCoords(regionX * 32 + cx, regionZ * 32 + cz));
+            }
+
+            return list;
+        }
     }
 
     @NotNull
@@ -108,21 +130,36 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
             throw new IllegalArgumentException(String.format("%s not in region %d %d", chunkCoords.toString(), regionX, regionZ));
         }
 
-        if (!offsetTable.containsKey(chunkCoords)) {
+        int index = chunkIndex(chunkCoords);
+
+        if (this.chunks[index] == null) {
             return createArray(0);
         }
 
+//        if (!offsetTable.containsKey(chunkCoords)) {
+//            return createArray(0);
+//        }
+
         synchronized (lock) {
-            try (VLDBInputStream in = in(offsetTable.get(chunkCoords))) {
+            try (VLDBInputStream in = in(chunks[index])) {
                 return in.readChunk(regionX, regionZ, this::createArray, this::createInstance).item2;
             }
         }
     }
 
     @NotNull
+    @Deprecated
     public List<L> readAll() throws IOException {
-        try (VLDBInputStream in = in()) {
-            return in.readAll(this::createArray, this::createInstance);
+        synchronized (lock) {
+            save();
+
+            try (VLDBInputStream in = new VLDBInputStream(FileUtil.openStreamInflate(file))) {
+                if (!in.readVLDBMagic()) {
+                    throw new IllegalStateException("Could not identify VLDB magic");
+                }
+
+                return in.readAll(this::createArray, this::createInstance);
+            }
         }
     }
 
@@ -132,11 +169,11 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
 
     public boolean hasChunkData(ChunkCoords chunkCoords) {
         synchronized (lock) {
-            return offsetTable.containsKey(chunkCoords);
+            return chunks[chunkIndex(chunkCoords)] != null;
         }
     }
 
-    public void insertChunk(@NotNull L[] chunk) throws IOException {
+    public void putChunk(@NotNull L[] chunk) throws IOException {
         requireNonNull(chunk);
 
         if (chunk.length == 0) {
@@ -159,120 +196,20 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
         }
 
         synchronized (lock) {
-            final ChunkCoords chunkCoords = new ChunkCoords(cx, cz);
+            final ChunkCoords chunkCoords = new ChunkCoords(cx, cz); // TODO Write into the chunks[]
 
-            if (hasChunkData(chunkCoords)) {
-                throw new IllegalStateException("Chunk already in this file!");
-            }
-
-            Map<ChunkCoords, Integer> newOffsetTable = new HashMap<>();
-
-            for (ChunkCoords key : offsetTable.keySet()) {
-                newOffsetTable.put(key, offsetTable.get(key) + SIZEOF_OFFSET_TABLE_ENTRY);
-            }
-
-            newOffsetTable.put(chunkCoords, fileContents.length + SIZEOF_OFFSET_TABLE_ENTRY);
+            final int index = chunkIndex(chunkCoords);
 
             Tuple<ByteArrayOutputStream, VLDBOutputStream> out = outToMemory();
 
             out.item2.writeChunk(cx, cz, chunk);
             out.item2.close();
 
-            final int oldHeaderSize = sizeofHeader(offsetTable.keySet().size());
-
-            final byte[] append = out.item1.toByteArray();
-            Tuple<ByteArrayOutputStream, VLDBOutputStream> newFileOut = outToMemory(fileContents.length + SIZEOF_OFFSET_TABLE_ENTRY + append.length);
-
-            newFileOut.item2.writeHeader(regionX, regionZ, newOffsetTable);
-            newFileOut.item2.write(fileContents, oldHeaderSize, fileContents.length - oldHeaderSize);
-            newFileOut.item2.write(append);
-
-            newFileOut.item2.close();
-
-            this.offsetTable = newOffsetTable;
-            this.fileContents = newFileOut.item1.toByteArray();
-
-            this.modified = true;
-        }
-    }
-
-    public void editChunk(@NotNull ChunkCoords coords, @NotNull L[] data) throws IOException {
-        requireNonNull(data);
-
-        if (data.length == 0) {
-            removeChunk(coords);
-            return;
-        }
-
-        final int cx = coords.x;
-        final int cz = coords.z;
-
-        for (int i = 0; i < data.length; i++) {
-            IntPosition pos = data[i].getPosition();
-
-            if (pos.getChunkX() != cx || pos.getChunkZ() != cz) {
-                throw new IllegalArgumentException("Not all Light sources are in the same chunk!");
-            }
-        }
-
-        if (coords.getRegionX() != regionX || coords.getRegionZ() != regionZ) {
-            throw new IllegalArgumentException(String.format("Chunk %d %d not in region %d %d", coords.x, coords.z, regionX, regionZ));
-        }
-
-        synchronized (lock) {
-            if (!hasChunkData(coords)) {
-                throw new IllegalArgumentException("Cannot edit chunk that is not already present");
+            if (this.chunks[index] == null) {
+                ++nonEmptyChunks;
             }
 
-            final int newChunkSize = sizeofChunk(data);
-            final int oldChunkSize = sizeofChunk(readChunk(coords));
-
-            final int targetChunkOffset = offsetTable.get(coords);
-
-            if (newChunkSize == oldChunkSize) {
-                // Header does not change, neither does total size
-
-                Tuple<ByteArrayOutputStream, VLDBOutputStream> newFileOut = outToMemory(fileContents.length);
-
-                newFileOut.item2.write(fileContents, 0, targetChunkOffset);
-                newFileOut.item2.writeChunk(cx, cz, data);
-                newFileOut.item2.write(fileContents, targetChunkOffset + oldChunkSize, fileContents.length - (targetChunkOffset + oldChunkSize));
-
-                newFileOut.item2.close();
-
-                this.fileContents = newFileOut.item1.toByteArray();
-            } else {
-                // Size of Header stays the same
-                // All chunks BEFORE the target chunk will keep the same offset
-                // All chunk AFTER the target chunk will have their offset increased by (newChunkSize - oldChunkSize)
-
-                final Map<ChunkCoords, Integer> newOffsetTable = new HashMap<>();
-
-                for (Map.Entry<ChunkCoords, Integer> entry : offsetTable.entrySet()) {
-                    if (coords.equals(entry.getKey())) {
-                        newOffsetTable.put(entry.getKey(), entry.getValue());
-                    } else if (entry.getValue() < targetChunkOffset) {
-                        newOffsetTable.put(entry.getKey(), entry.getValue());
-                    } else {
-                        newOffsetTable.put(entry.getKey(), entry.getValue() + (newChunkSize - oldChunkSize));
-                    }
-                }
-
-                final int headerLength = sizeofHeader(newOffsetTable.keySet().size());
-
-                Tuple<ByteArrayOutputStream, VLDBOutputStream> newFileOut = outToMemory(fileContents.length + (newChunkSize - oldChunkSize));
-
-                newFileOut.item2.writeHeader(regionX, regionZ, newOffsetTable);
-                newFileOut.item2.write(fileContents, headerLength, (targetChunkOffset - headerLength));
-                newFileOut.item2.writeChunk(cx, cz, data);
-                newFileOut.item2.write(fileContents, targetChunkOffset + oldChunkSize, fileContents.length - (targetChunkOffset + oldChunkSize));
-
-                newFileOut.item2.close();
-
-                this.offsetTable = newOffsetTable;
-                this.fileContents = newFileOut.item1.toByteArray();
-            }
-
+            this.chunks[index] = out.item1.toByteArray();
             this.modified = true;
         }
     }
@@ -285,44 +222,16 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
         }
 
         synchronized (lock) {
-            if (!hasChunkData(coords)) {
+
+            final int index = chunkIndex(coords);
+
+            if (this.chunks[index] == null) {
                 throw new IllegalStateException("Chunk not contained within this File!");
             }
 
-            // All chunks BEFORE the target chunk will have their offset reduced by 6 (OFFSET_TABLE_ENTRY_SIZE)
-            // All chunks AFTER the target chunk will have their offset reduced by 6 + sizeof(targetchunk)
-
-            final int targetChunkOffset = offsetTable.get(coords);
-            final int targetChunkSize = sizeofChunk(readChunk(coords));
-            final Map<ChunkCoords, Integer> newOffsetTable = new HashMap<>();
-
-            for (Map.Entry<ChunkCoords, Integer> entry : offsetTable.entrySet()) {
-                if (coords.equals(entry.getKey())) {
-                    continue;
-                }
-
-                if (entry.getValue() < targetChunkOffset) {
-                    newOffsetTable.put(entry.getKey(), entry.getValue() - SIZEOF_OFFSET_TABLE_ENTRY);
-                } else {
-                    newOffsetTable.put(entry.getKey(), entry.getValue() - (SIZEOF_OFFSET_TABLE_ENTRY + targetChunkSize));
-                }
-            }
-
-            final int oldHeaderSize = sizeofHeader(offsetTable.keySet().size());
-            final int newHeaderSize = sizeofHeader(newOffsetTable.keySet().size());
-
-            final Tuple<ByteArrayOutputStream, VLDBOutputStream> newFileOut = outToMemory(newHeaderSize + (fileContents.length - oldHeaderSize - targetChunkSize));
-
-            newFileOut.item2.writeHeader(regionX, regionZ, newOffsetTable);
-            newFileOut.item2.write(fileContents, oldHeaderSize, (targetChunkOffset - oldHeaderSize));
-            newFileOut.item2.write(fileContents, (targetChunkOffset + targetChunkSize), (fileContents.length - (targetChunkOffset + targetChunkSize)));
-
-            newFileOut.item2.close();
-
-            this.offsetTable = newOffsetTable;
-            this.fileContents = newFileOut.item1.toByteArray();
-
-            this.modified = true;
+            this.chunks[index] = null;
+            --nonEmptyChunks;
+            modified = true;
         }
     }
 
@@ -332,22 +241,60 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
 
     public boolean save() throws IOException {
         synchronized (lock) {
-            if (!modified) {
+            if (!modified || nonEmptyChunks == 0) {
                 return false;
             }
 
-            if (deflate) {
-                try (FileOutputStream fos = new FileOutputStream(file)) {
-                    GZIPOutputStream gzipOut = new GZIPOutputStream(fos);
+            try (
+                    OutputStream out = deflate ? new GZIPOutputStream(new FileOutputStream(file)) : new FileOutputStream(file)
+            ) {
+                final int headerSize = VLDBUtil.sizeofHeader(nonEmptyChunks);
+                Tuple<ByteArrayOutputStream, VLDBOutputStream> headerBuffer = outToMemory(headerSize);
 
-                    gzipOut.write(fileContents, 0, fileContents.length);
+                headerBuffer.item2.writeInt32(VLDBInputStream.VLDB_MAGIC);
+                headerBuffer.item2.writeInt32(regionX);
+                headerBuffer.item2.writeInt32(regionZ);
+                headerBuffer.item2.writeInt16(nonEmptyChunks);
 
-                    gzipOut.flush();
-                    gzipOut.close();
+                int offset = headerSize;
+                int written = 0;
+
+                LinkedList<Integer> chunkIndicesWithData = new LinkedList<>();
+
+                for (int i = 0; i < chunks.length; i++) {
+                    if (chunks[i] == null) {
+                        continue;
+                    }
+
+                    chunkIndicesWithData.add(i);
+
+                    int cx = i >> 5;
+                    int cz = i & 0x1F;
+
+                    headerBuffer.item2.writeInt16((cx << 8) | cz);
+                    headerBuffer.item2.writeInt32(offset);
+
+                    offset += chunks[i].length;
+
+                    if (++written == nonEmptyChunks) {
+                        break;
+                    }
                 }
-            } else {
-                try (FileOutputStream fos = new FileOutputStream(file)) {
-                    fos.write(fileContents);
+
+                // Don't need to flush the headerBuffer because it's a BAOS.
+
+                if (headerBuffer.item1.size() != headerSize) {
+                    throw new IllegalStateException("Expected header size " + headerSize + " but got " + headerBuffer.item1.size());
+                }
+
+                byte[] header = headerBuffer.item1.toByteArray();
+
+                out.write(header, 0, header.length);
+
+                while (!chunkIndicesWithData.isEmpty()) {
+                    int i = chunkIndicesWithData.removeFirst();
+
+                    out.write(chunks[i], 0, chunks[i].length);
                 }
             }
 
@@ -357,30 +304,8 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
     }
 
     @NotNull
-    private VLDBInputStream in(int offset) throws IOException {
-        VLDBInputStream in = new VLDBInputStream(new ByteArrayInputStream(fileContents, offset, fileContents.length - offset));
-
-        if (offset == 0 && !in.readVLDBMagic()) {
-            throw new IOException("Couldn't identify VLDB Magic");
-        }
-
-        return in;
-    }
-
-    @NotNull
-    private VLDBInputStream in() throws IOException {
-        VLDBInputStream in = new VLDBInputStream(new ByteArrayInputStream(fileContents));
-
-        if (!in.readVLDBMagic()) {
-            throw new IOException("Couldn't identify VLDB Magic");
-        }
-
-        return in;
-    }
-
-    @NotNull
-    private VLDBOutputStream out() throws IOException {
-        return new VLDBOutputStream(new GZIPOutputStream(new FileOutputStream(file)));
+    private VLDBInputStream in(byte[] data) {
+        return new VLDBInputStream(new ByteArrayInputStream(data));
     }
 
     @NotNull
@@ -393,27 +318,6 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
         ByteArrayOutputStream baos = new ByteArrayOutputStream(size);
 
         return new Tuple<>(baos, new VLDBOutputStream(baos));
-    }
-
-    private void readFileFully() throws IOException {
-        synchronized (lock) {
-            this.fileContents = FileUtil.readFileFullyInflate(file);
-        }
-    }
-
-    private void rereadHeader() throws IOException {
-        VLDBInputStream headerReader = in();
-
-        int readRx = headerReader.readInt32();
-        int readRz = headerReader.readInt32();
-
-        if (readRx != regionX || readRz != regionZ) {
-            throw new RuntimeException(String.format("Region information in header changed? (was: %d %d, is: %d %d)", regionX, regionZ, readRx, readRz)); // TODO Custom Exception?
-        }
-
-        this.offsetTable = headerReader.readHeader(this.regionX, this.regionZ);
-
-        headerReader.close();
     }
 
     @NotNull
@@ -429,7 +333,15 @@ public abstract class VLDBFile<L extends ICustomLightSource> {
     }
 
     public void unload() {
-        fileContents = null;
-        offsetTable.clear();
+        Arrays.fill(chunks, null);
+        nonEmptyChunks = 0;
+    }
+
+    private int chunkIndex(ChunkCoords chunkCoords) {
+        return chunkIndex(chunkCoords.getRegionRelativeX(), chunkCoords.getRegionRelativeZ());
+    }
+
+    private int chunkIndex(int cx, int cz) {
+        return cz << 5 | cx;
     }
 }
