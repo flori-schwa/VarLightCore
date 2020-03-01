@@ -1,18 +1,24 @@
 package me.shawlaf.varlight.persistence.nls;
 
+import lombok.Getter;
 import me.shawlaf.varlight.persistence.nls.io.NLSInputStream;
 import me.shawlaf.varlight.persistence.nls.io.NLSOutputStream;
 import me.shawlaf.varlight.util.ChunkCoords;
 import me.shawlaf.varlight.util.IntPosition;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class ChunkLightStorage {
 
-    private static final byte[] EMPTY_CHUNK_SECTION = new byte[16 * 16 * 16 / 2];
+    private static final int SECTION_SIZE = 16 * 16 * 16;
+    private static final byte[] EMPTY_CHUNK_SECTION = new byte[SECTION_SIZE / 2];
 
+    @Getter
     private final int chunkX;
+    @Getter
     private final int chunkZ;
     private final NibbleArray[] lightData = new NibbleArray[16];
 
@@ -34,7 +40,7 @@ public class ChunkLightStorage {
                 continue;
             }
 
-            cls.lightData[y] = in.readNibbleArray(16 * 16 * 16);
+            cls.lightData[y] = in.readNibbleArray(SECTION_SIZE);
         }
 
         return cls;
@@ -78,6 +84,28 @@ public class ChunkLightStorage {
         }
     }
 
+    public List<IntPosition> getAllLightSources() {
+        List<IntPosition> lightSources = new ArrayList<>();
+
+        int mask = getMask();
+
+        for (int y = 0; y < 16; ++y) {
+            NibbleArray arr = lightData[y];
+
+            if ((mask & (1 << y)) == 0) {
+                continue;
+            }
+
+            for (int i = 0; i < SECTION_SIZE; ++i) {
+                if (arr.get(i) > 0) {
+                    lightSources.add(fromIndex(y, i));
+                }
+            }
+        }
+
+        return lightSources;
+    }
+
     public boolean isEmpty() {
         return getMask() == 0;
     }
@@ -94,6 +122,16 @@ public class ChunkLightStorage {
         }
 
         return mask;
+    }
+
+    public void unload() {
+        for (int i = 0; i < lightData.length; ++i) {
+            lightData[i] = null;
+        }
+    }
+
+    public ChunkCoords getChunkCoords() {
+        return new ChunkCoords(chunkX, chunkZ);
     }
 
     protected void writeData(NLSOutputStream out) throws IOException {
@@ -120,9 +158,11 @@ public class ChunkLightStorage {
         return (y << 8) | (z << 4) | x;
     }
 
-    public void unload() {
-        for (int i = 0; i < lightData.length; ++i) {
-            lightData[i] = null;
-        }
+    private IntPosition fromIndex(int sectionY, int index) {
+        int x = chunkX * 16 + (index & 0xF);
+        int y = sectionY * 16 + ((index >>> 8) & 0xF);
+        int z = chunkZ * 16 + ((index >>> 4) & 0xF);
+
+        return new IntPosition(x, y, z);
     }
 }

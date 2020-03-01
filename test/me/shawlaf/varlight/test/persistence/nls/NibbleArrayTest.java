@@ -45,6 +45,32 @@ public class NibbleArrayTest {
         }
 
         assertArrayEquals(new byte[]{0x01, 0x23, 0x45, 0x67, (byte) 0x89, (byte) 0xAB, (byte) 0xCD, (byte) 0xEF}, nibbleArray.toByteArray());
+
+        for (int i = 0; i < 16; ++i) {
+            nibbleArray.set(i, 0);
+        }
+
+        for (int i = 0; i < 16; i++) {
+            assertEquals(0, nibbleArray.get(i));
+        }
+
+        assertArrayEquals(new byte[8], nibbleArray.toByteArray());
+
+        nibbleArray.set(0, 4);
+        nibbleArray.set(1, 6);
+
+        assertEquals(4, nibbleArray.get(0));
+        assertEquals(6, nibbleArray.get(1));
+
+        nibbleArray.set(1, 3);
+
+        assertEquals(4, nibbleArray.get(0));
+        assertEquals(3, nibbleArray.get(1));
+
+        nibbleArray.set(0, 2);
+
+        assertEquals(2, nibbleArray.get(0));
+        assertEquals(3, nibbleArray.get(1));
     }
 
 }
