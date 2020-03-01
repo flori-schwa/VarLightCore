@@ -13,7 +13,7 @@ public class ChunkSectionPosition {
     }
 
     public ChunkSectionPosition(int x, int y, int z) {
-        ParameterRange.assertInRange("y", y, 0, 15);
+        Preconditions.assertInRange("y", y, 0, 15);
 
         this.x = x;
         this.y = y;

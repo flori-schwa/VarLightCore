@@ -1,5 +1,6 @@
 package me.shawlaf.varlight.persistence.nls;
 
+import lombok.Getter;
 import me.shawlaf.varlight.persistence.nls.io.NLSInputStream;
 import me.shawlaf.varlight.persistence.nls.io.NLSOutputStream;
 import me.shawlaf.varlight.util.ChunkCoords;
@@ -14,14 +15,19 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 import java.util.zip.GZIPOutputStream;
 
 public class NLSFile {
+
+    private static final Logger LOGGER = Logger.getLogger(NLSFile.class.getSimpleName());
+
     public static String FILE_NAME_FORMAT = "r.%d.%d.nls";
 
     public final File file;
 
     private final Object lock = new Object();
+    @Getter
     private final int regionX, regionZ;
     private final boolean deflate;
 
@@ -125,14 +131,21 @@ public class NLSFile {
         }
     }
 
+    public int getMask(ChunkCoords chunkCoords) {
+        synchronized (lock) {
+            ChunkLightStorage cls = getChunk(chunkCoords);
+
+            if (cls == null) {
+                return 0;
+            }
+
+            return cls.getMask();
+        }
+    }
+
     @Nullable
     private ChunkLightStorage getChunk(ChunkCoords chunkCoords) {
         return chunks[chunkIndex(chunkCoords)];
-    }
-
-    @NotNull
-    private ChunkLightStorage getOrCreateChunk(ChunkCoords chunkCoords) {
-        return getOrCreateChunk(chunkIndex(chunkCoords), () -> chunkCoords);
     }
 
     @NotNull
@@ -154,6 +167,13 @@ public class NLSFile {
 
     private int chunkIndex(int cx, int cz) {
         return cz << 5 | cx;
+    }
+
+    public boolean saveAndUnload() throws IOException {
+        boolean saved = save();
+        unload();
+
+        return saved;
     }
 
     public boolean save() throws IOException {
@@ -182,6 +202,21 @@ public class NLSFile {
         }
 
         return true;
+    }
+
+    public void unload() {
+        if (modified) {
+            LOGGER.warning("Unloading dirty NLS File " + file.getName());
+        }
+
+        for (int i = 0; i < chunks.length; ++i) {
+            if (chunks[i] == null) {
+                continue;
+            }
+
+            chunks[i].unload();
+            chunks[i] = null;
+        }
     }
 
 }

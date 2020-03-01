@@ -15,6 +15,7 @@ import java.util.zip.GZIPInputStream;
 
 import static me.shawlaf.varlight.persistence.vldb.VLDBUtil.SIZEOF_OFFSET_TABLE_ENTRY;
 
+@Deprecated
 public class VLDBInputStream implements Closeable {
 
     public static int VLDB_MAGIC = 0x56_4C_44_42;

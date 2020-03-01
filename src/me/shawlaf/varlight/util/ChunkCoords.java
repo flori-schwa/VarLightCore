@@ -30,9 +30,9 @@ public class ChunkCoords {
     }
 
     public IntPosition getRelative(int dx, int dy, int dz) {
-        ParameterRange.assertInRange("dx", dx, 0, 15);
-        ParameterRange.assertInRange("dy", dy, 0, 255);
-        ParameterRange.assertInRange("dz", dz, 0, 15);
+        Preconditions.assertInRange("dx", dx, 0, 15);
+        Preconditions.assertInRange("dy", dy, 0, 255);
+        Preconditions.assertInRange("dz", dz, 0, 15);
 
         return new IntPosition(this.x * 16 + dx, dy, this.z * 16 + dz);
     }

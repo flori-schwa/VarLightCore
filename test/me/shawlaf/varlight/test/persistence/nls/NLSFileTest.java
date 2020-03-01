@@ -1,6 +1,7 @@
 package me.shawlaf.varlight.test.persistence.nls;
 
 import me.shawlaf.varlight.persistence.nls.NLSFile;
+import me.shawlaf.varlight.util.ChunkCoords;
 import me.shawlaf.varlight.util.IntPosition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -11,8 +12,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.zip.GZIPOutputStream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class NLSFileTest {
 
@@ -89,17 +89,43 @@ public class NLSFileTest {
         File file = new File(tempDir, "r.0.0.nls");
         NLSFile nlsFile = NLSFile.newFile(file, 0, 0);
 
+        assertFalse(nlsFile.save());
+
         for (int x = 0; x < 16; ++x) {
             nlsFile.setCustomLuminance(new IntPosition(x, 0, 0), x);
         }
 
-        nlsFile.save();
+        assertTrue(nlsFile.saveAndUnload());
 
         nlsFile = NLSFile.existingFile(file);
 
         for (int x = 0; x < 16; ++x) {
             assertEquals(x, nlsFile.getCustomLuminance(new IntPosition(x, 0, 0)));
         }
+    }
+
+    @Test
+    public void testFragmentedWrite(@TempDir File tempDir) throws IOException {
+        File file = new File(tempDir, "r.0.0.nls");
+        NLSFile nlsFile = NLSFile.newFile(file, 0, 0);
+
+        nlsFile.setCustomLuminance(new IntPosition(0, 0, 0), 1);
+        nlsFile.setCustomLuminance(new IntPosition(0, 32, 0), 2);
+        nlsFile.setCustomLuminance(new IntPosition(0, 33, 0), 3);
+        nlsFile.setCustomLuminance(new IntPosition(0, 65, 0), 4);
+
+        assertEquals(0b10101, nlsFile.getMask(ChunkCoords.ORIGIN));
+
+        assertTrue(nlsFile.saveAndUnload());
+
+        nlsFile = NLSFile.existingFile(file);
+
+        assertEquals(0b10101, nlsFile.getMask(ChunkCoords.ORIGIN));
+
+        assertEquals(1, nlsFile.getCustomLuminance(new IntPosition(0, 0, 0)));
+        assertEquals(2, nlsFile.getCustomLuminance(new IntPosition(0, 32, 0)));
+        assertEquals(3, nlsFile.getCustomLuminance(new IntPosition(0, 33, 0)));
+        assertEquals(4, nlsFile.getCustomLuminance(new IntPosition(0, 65, 0)));
     }
 
     @Test
@@ -131,7 +157,7 @@ public class NLSFileTest {
         System.out.println("[" + (now - start) + "ms] Saving (Writing took: " + (now - lastSplit) + "ms)");
         lastSplit = System.currentTimeMillis();
 
-        nlsFile.save();
+        assertTrue(nlsFile.saveAndUnload());
 
         now = System.currentTimeMillis();
         System.out.println("[" + (now - start) + "ms] Reading (Saving took: " + (now - lastSplit) + "ms)");

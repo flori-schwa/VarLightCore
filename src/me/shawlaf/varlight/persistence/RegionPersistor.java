@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+@Deprecated
 public abstract class RegionPersistor<L extends ICustomLightSource> {
 
     private static final int REGION_SIZE = 32;
@@ -153,7 +154,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
     /**
      * <p>Unloads the Custom Light data for the Chunk with the specified {@link ChunkCoords} from the cache.</p>
      * <p>If the Chunk was marked as dirty in {@link RegionPersistor#markDirty(ChunkCoords)} or {@link RegionPersistor#markDirty(IntPosition)} the Chunk will be flushed.</p>
-     * 
+     *
      * @param chunkCoords The {@link ChunkCoords} of the Chunk, whose Light data should be unloaded from the cache.
      * @throws IOException If an {@link IOException} occurs while flushing the Chunk.
      */
@@ -234,7 +235,7 @@ public abstract class RegionPersistor<L extends ICustomLightSource> {
      * <p>Inserts the Lightsource at Position {@link ICustomLightSource#getPosition()} if no Light Source exists at that position yet.</p>
      * <p>Modifies the Lightsource at the Position, if a Light Source already exists at the Position and {@link ICustomLightSource#getCustomLuminance()} is {@code > 0}</p>
      * <p>Deletes the Lightsource at the Position, if {@link ICustomLightSource#getCustomLuminance()} is {@code 0}.</p>
-     *
+     * <p>
      * <br />
      *
      * <p>If The Chunk containing {@link ICustomLightSource#getPosition()} is not yet loaded into the cache, {@link RegionPersistor#loadChunk(ChunkCoords)} will be called.</p>

@@ -62,10 +62,6 @@ public class NLSOutputStream implements Flushable, Closeable, AutoCloseable {
         write(buffer);
     }
 
-    public void writeNibbleArray(NibbleArray nibbleArray) throws IOException {
-        nibbleArray.write(out);
-    }
-
     public void write(byte[] buffer) throws IOException {
         out.write(buffer, 0, buffer.length);
     }

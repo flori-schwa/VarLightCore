@@ -1,6 +1,6 @@
 package me.shawlaf.varlight.persistence.nls;
 
-import me.shawlaf.varlight.util.ParameterRange;
+import me.shawlaf.varlight.util.Preconditions;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -37,7 +37,7 @@ public class NibbleArray {
     }
 
     public void set(int index, int value) {
-        ParameterRange.assertInRange("value", value, 0x0, 0xF);
+        Preconditions.assertInRange("value", value, 0x0, 0xF);
 
         int b = array[index >> 1];
 

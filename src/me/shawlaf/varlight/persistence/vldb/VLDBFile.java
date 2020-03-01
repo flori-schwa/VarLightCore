@@ -6,7 +6,6 @@ import me.shawlaf.varlight.util.FileUtil;
 import me.shawlaf.varlight.util.IntPosition;
 import me.shawlaf.varlight.util.Tuple;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -19,6 +18,7 @@ import static java.util.Objects.requireNonNull;
 import static me.shawlaf.varlight.persistence.vldb.VLDBUtil.SIZEOF_INT32;
 import static me.shawlaf.varlight.persistence.vldb.VLDBUtil.SIZEOF_MAGIC;
 
+@Deprecated
 public abstract class VLDBFile<L extends ICustomLightSource> {
 
     public static String FILE_NAME_FORMAT = "r.%d.%d.vldb2";

@@ -4,6 +4,7 @@ import me.shawlaf.varlight.persistence.ICustomLightSource;
 
 import java.nio.charset.StandardCharsets;
 
+@Deprecated
 public class VLDBUtil {
 
     public static final int SIZEOF_BYTE = 1;

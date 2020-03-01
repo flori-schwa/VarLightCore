@@ -3,7 +3,7 @@ package me.shawlaf.varlight.util;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
-public class ParameterRange {
+public class Preconditions {
 
     public static void assertInRange(String paramName, int value, int minIncl, int maxIncl) {
         if (value < minIncl) {

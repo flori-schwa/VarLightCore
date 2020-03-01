@@ -5,6 +5,7 @@ import me.shawlaf.varlight.util.IntPosition;
 
 import java.util.Objects;
 
+@Deprecated
 public class BasicCustomLightSource implements ICustomLightSource {
     @Getter private final IntPosition position;
     @Getter private final String type;

@@ -42,6 +42,7 @@ import java.util.Map;
                 [int32  ]       File offset for this chunk's Data
      */
 
+@Deprecated
 public class VLDBOutputStream implements Flushable, Closeable, AutoCloseable {
 
     protected final DataOutputStream baseStream;

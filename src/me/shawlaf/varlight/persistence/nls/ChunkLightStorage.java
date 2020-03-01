@@ -120,4 +120,9 @@ public class ChunkLightStorage {
         return (y << 8) | (z << 4) | x;
     }
 
+    public void unload() {
+        for (int i = 0; i < lightData.length; ++i) {
+            lightData[i] = null;
+        }
+    }
 }
