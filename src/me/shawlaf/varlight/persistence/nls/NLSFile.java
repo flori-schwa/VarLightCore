@@ -251,6 +251,7 @@ public class NLSFile {
     public void unload() {
         if (modified) {
             LOGGER.warning("Unloading dirty NLS File " + file.getName());
+            new Exception().printStackTrace();
         }
 
         synchronized (lock) {

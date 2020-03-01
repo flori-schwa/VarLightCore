@@ -50,7 +50,8 @@ public class ChunkLightStorage {
         int y = position.y >> 4;
 
         if (y < 0 || y > 16) {
-            throw new IllegalArgumentException("Position out of Range");
+            return 0;
+            // throw new IllegalArgumentException(String.format("Position %s out of Range for Chunk [%d, %d]", position.toShortString(), chunkX, chunkZ));
         }
 
         NibbleArray section = lightData[y];

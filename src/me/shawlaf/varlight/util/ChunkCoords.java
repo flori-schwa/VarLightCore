@@ -29,6 +29,30 @@ public class ChunkCoords {
         return MathUtil.modulo(z, 32);
     }
 
+    public int getCornerAX() {
+        return x << 4;
+    }
+
+    public int getCornerAY() {
+        return 0;
+    }
+
+    public int getCornerAZ() {
+        return z << 4;
+    }
+
+    public int getCornerBX() {
+        return getCornerAX() + 15;
+    }
+
+    public int getCornerBY() {
+        return 255;
+    }
+
+    public int getCornerBZ() {
+        return getCornerAZ() + 15;
+    }
+
     public IntPosition getRelative(int dx, int dy, int dz) {
         Preconditions.assertInRange("dx", dx, 0, 15);
         Preconditions.assertInRange("dy", dy, 0, 255);
