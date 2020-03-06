@@ -42,11 +42,9 @@ public class NibbleArray {
         int b = array[index >> 1];
 
         if ((index & 1) == 0) {
-            b &= ~(0xF0);
-            b |= (value << 4);
+            b = (value << 4) | (b & 0x0F);
         } else {
-            b &= ~(0x0F);
-            b |= value;
+            b = (b & 0xF0) | value;
         }
 
         array[index >> 1] = (byte) b;

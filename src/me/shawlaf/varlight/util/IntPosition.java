@@ -44,6 +44,18 @@ public class IntPosition implements Comparable<IntPosition> {
         return getChunkZ() >> 5;
     }
 
+    public int xDistanceTo(IntPosition other) {
+        return Math.abs(other.x - this.x);
+    }
+
+    public int yDistanceTo(IntPosition other) {
+        return Math.abs(other.y - this.y);
+    }
+
+    public int zDistanceTo(IntPosition other) {
+        return Math.abs(other.z - this.z);
+    }
+
     public boolean outOfBounds() {
         return y < 0 || y > 255;
     }
