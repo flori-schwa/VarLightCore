@@ -14,7 +14,7 @@ public class Paginator {
     }
 
     public static int getAmountPages(int total, int pageSize) {
-        return (total / pageSize) + (total % pageSize > 0 ? 1 : 0);
+        return Math.max(1, (total / pageSize) + (total % pageSize > 0 ? 1 : 0));
     }
 
     public static <T> List<T> paginateEntries(List<T> all, int pageSize, int page) {
