@@ -30,11 +30,6 @@ public class VLDBInputStream implements Closeable {
         this(new DataInputStream(inputStream));
     }
 
-    @Override
-    public void close() throws IOException {
-        this.baseStream.close();
-    }
-
     public static boolean verifyVLDB(File file) throws IOException {
         VLDBInputStream in;
         boolean isVLDB;
@@ -105,6 +100,11 @@ public class VLDBInputStream implements Closeable {
         }
 
         return baos.toByteArray();
+    }
+
+    @Override
+    public void close() throws IOException {
+        this.baseStream.close();
     }
 
     public boolean readVLDBMagic() throws IOException {

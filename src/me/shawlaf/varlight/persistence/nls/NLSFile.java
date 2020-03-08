@@ -38,22 +38,6 @@ public class NLSFile {
     @Getter
     private int nonEmptyChunks = 0;
 
-    public static NLSFile newFile(@NotNull File file, int regionX, int regionZ) {
-        return new NLSFile(file, regionX, regionZ, true);
-    }
-
-    public static NLSFile newFile(@NotNull File file, int regionX, int regionZ, boolean deflate) {
-        return new NLSFile(file, regionX, regionZ, deflate);
-    }
-
-    public static NLSFile existingFile(@NotNull File file) throws IOException {
-        return new NLSFile(file, true);
-    }
-
-    public static NLSFile existingFile(@NotNull File file, boolean deflate) throws IOException {
-        return new NLSFile(file, deflate);
-    }
-
     private NLSFile(@NotNull File file, int regionX, int regionZ, boolean deflate) {
         Objects.requireNonNull(file);
 
@@ -113,6 +97,22 @@ public class NLSFile {
                 }
             }
         }
+    }
+
+    public static NLSFile newFile(@NotNull File file, int regionX, int regionZ) {
+        return new NLSFile(file, regionX, regionZ, true);
+    }
+
+    public static NLSFile newFile(@NotNull File file, int regionX, int regionZ, boolean deflate) {
+        return new NLSFile(file, regionX, regionZ, deflate);
+    }
+
+    public static NLSFile existingFile(@NotNull File file) throws IOException {
+        return new NLSFile(file, true);
+    }
+
+    public static NLSFile existingFile(@NotNull File file, boolean deflate) throws IOException {
+        return new NLSFile(file, deflate);
     }
 
     public RegionCoords getRegionCoords() {

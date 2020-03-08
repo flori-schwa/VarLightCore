@@ -7,10 +7,13 @@ import java.util.Objects;
 
 @Deprecated
 public class BasicCustomLightSource implements ICustomLightSource {
-    @Getter private final IntPosition position;
-    @Getter private final String type;
+    @Getter
+    private final IntPosition position;
+    @Getter
+    private final String type;
     private final int emittingLight;
-    @Getter private final boolean migrated;
+    @Getter
+    private final boolean migrated;
 
     public BasicCustomLightSource(IntPosition position, int emittingLight, boolean migrated, String type) {
         this.position = position;

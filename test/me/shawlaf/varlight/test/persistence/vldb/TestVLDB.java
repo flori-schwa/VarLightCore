@@ -475,13 +475,13 @@ public class TestVLDB {
             }
         };
 
-        file.putChunk(new BasicCustomLightSource[] {
+        file.putChunk(new BasicCustomLightSource[]{
                 new BasicCustomLightSource(IntPosition.ORIGIN, 15, true, "minecraft:stone")
         });
 
         file.save();
 
-        byte[] expected = new byte[] {
+        byte[] expected = new byte[]{
                 // Begin Header
                 0x56, 0x4C, 0x44, 0x42, // Magic
                 0x00, 0x00, 0x00, 0x00, // region X

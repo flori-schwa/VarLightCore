@@ -10,10 +10,6 @@ public class NibbleArray {
 
     protected final byte[] array;
 
-    public int length() {
-        return array.length * 2;
-    }
-
     public NibbleArray(int size) {
         if ((size & 1) != 0) {
             throw new IllegalArgumentException("Odd values not allowed");
@@ -24,6 +20,10 @@ public class NibbleArray {
 
     public NibbleArray(byte[] array) {
         this.array = Arrays.copyOf(array, array.length);
+    }
+
+    public int length() {
+        return array.length * 2;
     }
 
     public int get(int index) {

@@ -3,6 +3,7 @@ package me.shawlaf.varlight.test.util;
 import me.shawlaf.varlight.util.ChunkCoords;
 import me.shawlaf.varlight.util.IntPosition;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 public class TestChunkCoords {
@@ -23,7 +24,7 @@ public class TestChunkCoords {
             int expectedRegionZ,
             int expectedRegionRelativeX,
             int expectedRegionRelativeZ
-            ) {
+    ) {
         assertEquals(expectedX, coords.x);
         assertEquals(expectedZ, coords.z);
 
@@ -40,12 +41,12 @@ public class TestChunkCoords {
 
         assertEquals(coords.hashCode(), clone.hashCode());
 
-        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(-1,  0, 0));
-        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(16,  0, 0));
-        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(0,  -1, 0));
-        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(0,  256, 0));
-        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(0,  0, -1));
-        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(0,  0, 16));
+        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(-1, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(16, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(0, -1, 0));
+        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(0, 256, 0));
+        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(0, 0, -1));
+        assertThrows(IllegalArgumentException.class, () -> coords.getRelative(0, 0, 16));
 
         IntPosition relative = coords.getRelative(1, 1, 1);
 
