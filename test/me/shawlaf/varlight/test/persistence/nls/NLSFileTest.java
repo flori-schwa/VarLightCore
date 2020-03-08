@@ -1,6 +1,7 @@
 package me.shawlaf.varlight.test.persistence.nls;
 
 import me.shawlaf.varlight.persistence.nls.NLSFile;
+import me.shawlaf.varlight.persistence.nls.NLSUtil;
 import me.shawlaf.varlight.util.ChunkCoords;
 import me.shawlaf.varlight.util.IntPosition;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.zip.GZIPOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -73,7 +75,7 @@ public class NLSFileTest {
     public void testRead(@TempDir File tempDir) throws IOException {
         byte[] testData = buildTestData(1, 0, 0);
 
-        File file = new File(tempDir, "r.0.0.nls");
+        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, 0, 0));
 
         writeGzipped(file, testData);
 
@@ -86,7 +88,7 @@ public class NLSFileTest {
 
     @Test
     public void testWrite(@TempDir File tempDir) throws IOException {
-        File file = new File(tempDir, "r.0.0.nls");
+        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, 0, 0));
         NLSFile nlsFile = NLSFile.newFile(file, 0, 0);
 
         assertFalse(nlsFile.save());
@@ -95,9 +97,12 @@ public class NLSFileTest {
             nlsFile.setCustomLuminance(new IntPosition(x, 0, 0), x);
         }
 
+        assertEquals(1, nlsFile.getNonEmptyChunks());
         assertTrue(nlsFile.saveAndUnload());
 
         nlsFile = NLSFile.existingFile(file);
+
+        assertEquals(1, nlsFile.getNonEmptyChunks());
 
         for (int x = 0; x < 16; ++x) {
             assertEquals(x, nlsFile.getCustomLuminance(new IntPosition(x, 0, 0)));
@@ -106,7 +111,7 @@ public class NLSFileTest {
 
     @Test
     public void testFragmentedWrite(@TempDir File tempDir) throws IOException {
-        File file = new File(tempDir, "r.0.0.nls");
+        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, 0, 0));
         NLSFile nlsFile = NLSFile.newFile(file, 0, 0);
 
         nlsFile.setCustomLuminance(new IntPosition(0, 0, 0), 1);
@@ -114,12 +119,14 @@ public class NLSFileTest {
         nlsFile.setCustomLuminance(new IntPosition(0, 33, 0), 3);
         nlsFile.setCustomLuminance(new IntPosition(0, 65, 0), 4);
 
+        assertEquals(1, nlsFile.getNonEmptyChunks());
         assertEquals(0b10101, nlsFile.getMask(ChunkCoords.ORIGIN));
 
         assertTrue(nlsFile.saveAndUnload());
 
         nlsFile = NLSFile.existingFile(file);
 
+        assertEquals(1, nlsFile.getNonEmptyChunks());
         assertEquals(0b10101, nlsFile.getMask(ChunkCoords.ORIGIN));
 
         assertEquals(1, nlsFile.getCustomLuminance(new IntPosition(0, 0, 0)));
@@ -130,7 +137,7 @@ public class NLSFileTest {
 
     @Test
     public void stressTest(@TempDir File tempDir) throws IOException {
-        File file = new File(tempDir, "r.0.0.nls");
+        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, 0, 0));
         NLSFile nlsFile = NLSFile.newFile(file, 0, 0);
 
         long start = System.currentTimeMillis();
@@ -157,6 +164,8 @@ public class NLSFileTest {
         System.out.println("[" + (now - start) + "ms] Saving (Writing took: " + (now - lastSplit) + "ms)");
         lastSplit = System.currentTimeMillis();
 
+        assertEquals(32 * 32, nlsFile.getNonEmptyChunks());
+
         assertTrue(nlsFile.saveAndUnload());
 
         now = System.currentTimeMillis();
@@ -164,6 +173,8 @@ public class NLSFileTest {
         lastSplit = now;
 
         nlsFile = NLSFile.existingFile(file);
+
+        assertEquals(32 * 32, nlsFile.getNonEmptyChunks());
 
         i = 1;
 
@@ -178,6 +189,64 @@ public class NLSFileTest {
                     if (++i == 16) {
                         i = 1;
                     }
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testGetAffectedChunks(@TempDir File tempDir) throws IOException {
+
+        int regionX = 0;
+        int regionZ = 0;
+
+        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, regionX, regionZ));
+        NLSFile nlsFile = NLSFile.newFile(file, regionX, regionZ);
+
+        IntPosition regionOrigin = new IntPosition(32 * 16 * regionX, 0, 32 * 16 * regionZ);
+
+        for (int cz = 0; cz < 32; ++cz) {
+            for (int cx = 0; cx < 32; ++cx) {
+                if ((cx & 1) != 0 || (cz & 1) != 0) {
+                    continue;
+                }
+
+                nlsFile.setCustomLuminance(regionOrigin.getRelative(16 * cx, 0, 16 * cz), 15);
+            }
+        }
+
+        assertEquals(256, nlsFile.getNonEmptyChunks());
+        List<ChunkCoords> affected = nlsFile.getAffectedChunks();
+
+        for (int cz = 0; cz < 32; ++cz) {
+            for (int cx = 0; cx < 32; ++cx) {
+                boolean bothEven = (cx & 1) == 0 && (cz & 1) == 0;
+                ChunkCoords chunkCoords = new ChunkCoords(32 * regionX + cx, 32 * regionZ + cz);
+
+                if (bothEven) {
+                    assertTrue(affected.contains(chunkCoords));
+                } else {
+                    assertFalse(affected.contains(chunkCoords));
+                }
+            }
+        }
+
+        assertTrue(nlsFile.saveAndUnload());
+
+        nlsFile = NLSFile.existingFile(file);
+
+        assertEquals(256, nlsFile.getNonEmptyChunks());
+        affected = nlsFile.getAffectedChunks();
+
+        for (int cz = 0; cz < 32; ++cz) {
+            for (int cx = 0; cx < 32; ++cx) {
+                boolean bothEven = (cx & 1) == 0 && (cz & 1) == 0;
+                ChunkCoords chunkCoords = new ChunkCoords(32 * regionX + cx, 32 * regionZ + cz);
+
+                if (bothEven) {
+                    assertTrue(affected.contains(chunkCoords));
+                } else {
+                    assertFalse(affected.contains(chunkCoords));
                 }
             }
         }

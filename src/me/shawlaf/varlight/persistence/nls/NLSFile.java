@@ -8,7 +8,6 @@ import me.shawlaf.varlight.util.FileUtil;
 import me.shawlaf.varlight.util.IntPosition;
 import me.shawlaf.varlight.util.RegionCoords;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.io.EOFException;
 import java.io.File;
@@ -17,7 +16,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.zip.GZIPOutputStream;
 
@@ -98,16 +96,17 @@ public class NLSFile {
                         int position = in.readInt16();
 
                         if (chunks[position] != null) {
-
-                            int cx = 32 * regionX + (position & 0x1F);
-                            int cz = 32 * regionZ + ((position >>> 5) & 0x1F);
-
-                            throw new IllegalStateException(String.format("Duplicate Chunk Information for [%d, %d] found in File %s", cx, cz, file.getAbsolutePath()));
+                            throw new IllegalStateException(String.format("Duplicate Chunk Information for Chunk %s found in File %s", NLSUtil.fromEncoded(regionX, regionZ, position), file.getAbsolutePath()));
                         }
 
-                        chunks[position] = ChunkLightStorage.read(position, regionX, regionZ, in);
+                        ChunkLightStorage cls = ChunkLightStorage.read(position, regionX, regionZ, in);
 
-                        ++nonEmptyChunks;
+                        if (cls.isEmpty()) {
+                            LOGGER.warning("Not loading Chunk " + NLSUtil.fromEncoded(regionX, regionZ, position) + " because it is empty");
+                        } else {
+                            chunks[position] = cls;
+                            ++nonEmptyChunks;
+                        }
                     }
                 } catch (EOFException e) {
                     // Ignore
@@ -122,7 +121,7 @@ public class NLSFile {
 
     public int getCustomLuminance(IntPosition position) {
         synchronized (lock) {
-            ChunkLightStorage chunk = getChunk(position.toChunkCoords());
+            ChunkLightStorage chunk = chunks[chunkIndex(position.toChunkCoords())];
 
             if (chunk == null) {
                 return 0;
@@ -137,12 +136,30 @@ public class NLSFile {
         int index = chunkIndex(chunkCoords);
 
         synchronized (lock) {
-            ChunkLightStorage chunk = getOrCreateChunk(index, () -> chunkCoords);
+            ChunkLightStorage chunk = chunks[index];
 
-            chunk.setCustomLuminance(position, value);
+            if (chunk == null) {
+                if (value == 0) {
+                    return;
+                }
 
-            if (value == 0) {
-                if (chunk.getMask() == 0) {
+                chunk = new ChunkLightStorage(chunkCoords);
+
+                chunk.setCustomLuminance(position, value);
+
+                // The value set is not 0 -> The chunk is not empty, if the value is illegal, an exception will be thrown
+
+                chunks[index] = chunk;
+                ++nonEmptyChunks;
+
+            } else {
+                if (chunk.getCustomLuminance(position) == value) {
+                    return;
+                }
+
+                chunk.setCustomLuminance(position, value);
+
+                if (value == 0 && chunk.isEmpty()) { // If the last Light source was removed
                     chunks[index] = null;
                     --nonEmptyChunks;
                 }
@@ -154,7 +171,7 @@ public class NLSFile {
 
     public int getMask(ChunkCoords chunkCoords) {
         synchronized (lock) {
-            ChunkLightStorage cls = getChunk(chunkCoords);
+            ChunkLightStorage cls = chunks[chunkIndex(chunkCoords)];
 
             if (cls == null) {
                 return 0;
@@ -264,21 +281,6 @@ public class NLSFile {
                 chunks[i] = null;
             }
         }
-    }
-
-    @Nullable
-    private ChunkLightStorage getChunk(ChunkCoords chunkCoords) {
-        return chunks[chunkIndex(chunkCoords)];
-    }
-
-    @NotNull
-    private ChunkLightStorage getOrCreateChunk(int index, Supplier<ChunkCoords> chunkCoordsSupplier) {
-        if (chunks[index] == null) {
-            ++nonEmptyChunks;
-            return (chunks[index] = new ChunkLightStorage(chunkCoordsSupplier.get()));
-        }
-
-        return chunks[index];
     }
 
     private NLSInputStream openNLSFile(File file) throws IOException {
