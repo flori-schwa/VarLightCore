@@ -81,10 +81,7 @@ public class ChunkCoords {
 
     @Override
     public String toString() {
-        return "ChunkCoords{" +
-                "x=" + x +
-                ", z=" + z +
-                '}';
+        return String.format("ChunkCoords{x=%d, z=%d}", x, z);
     }
 
     public String toShortString() {

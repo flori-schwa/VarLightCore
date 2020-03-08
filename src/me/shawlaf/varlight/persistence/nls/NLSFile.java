@@ -85,7 +85,7 @@ public class NLSFile {
                 int version = in.readInt32();
 
                 if (version != NLSUtil.CURRENT_VERSION) {
-                    throw new IllegalStateException("Expected NLS Version " + NLSUtil.CURRENT_VERSION + ", got " + version);
+                    throw new IllegalStateException(String.format("Expected NLS Version %d, got %d", NLSUtil.CURRENT_VERSION, version));
                 }
 
                 this.regionX = in.readInt32();
@@ -102,7 +102,7 @@ public class NLSFile {
                         ChunkLightStorage cls = ChunkLightStorage.read(position, regionX, regionZ, in);
 
                         if (cls.isEmpty()) {
-                            LOGGER.warning("Not loading Chunk " + NLSUtil.fromEncoded(regionX, regionZ, position) + " because it is empty");
+                            LOGGER.warning(String.format("Not loading Chunk %s because it is empty", NLSUtil.fromEncoded(regionX, regionZ, position).toShortString()));
                         } else {
                             chunks[position] = cls;
                             ++nonEmptyChunks;
