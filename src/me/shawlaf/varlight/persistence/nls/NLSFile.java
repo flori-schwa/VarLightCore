@@ -228,7 +228,7 @@ public class NLSFile {
 
                 list.add(chunks[i].getChunkCoords());
 
-                if (++i == found) {
+                if (++found == nonEmptyChunks) {
                     break;
                 }
             }

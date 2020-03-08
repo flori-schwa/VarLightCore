@@ -61,6 +61,10 @@ public class ChunkCoords {
         return new IntPosition(this.x * 16 + dx, dy, this.z * 16 + dz);
     }
 
+    public ChunkCoords getRelativeChunk(int dx, int dz) {
+        return new ChunkCoords(x + dx, z + dz);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

@@ -1,7 +1,6 @@
 package me.shawlaf.varlight.test.persistence.nls;
 
 import me.shawlaf.varlight.persistence.nls.NLSFile;
-import me.shawlaf.varlight.persistence.nls.NLSUtil;
 import me.shawlaf.varlight.util.ChunkCoords;
 import me.shawlaf.varlight.util.IntPosition;
 import org.junit.jupiter.api.Test;
@@ -250,6 +249,65 @@ public class NLSFileTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void testRemoveLastLightSource(@TempDir File tempDir) {
+        int regionX = 0;
+        int regionZ = 0;
+
+        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, regionX, regionZ));
+        NLSFile nlsFile = NLSFile.newFile(file, regionX, regionZ);
+
+        ChunkCoords regionOriginChunk = new ChunkCoords(32 * regionX, 32 * regionZ);
+        IntPosition regionOrigin = regionOriginChunk.getRelative(0, 0, 0);
+
+        nlsFile.setCustomLuminance(regionOrigin, 15);
+
+        assertEquals(1, nlsFile.getNonEmptyChunks());
+        assertTrue(nlsFile.getAffectedChunks().contains(regionOriginChunk));
+        assertEquals(1, nlsFile.getMask(regionOriginChunk));
+
+        nlsFile.setCustomLuminance(regionOrigin.getRelative(0, 16, 0), 15);
+
+        assertEquals(1, nlsFile.getNonEmptyChunks());
+        assertTrue(nlsFile.getAffectedChunks().contains(regionOriginChunk));
+        assertEquals(0b11, nlsFile.getMask(regionOriginChunk));
+
+        nlsFile.setCustomLuminance(regionOrigin, 0);
+
+        assertEquals(1, nlsFile.getNonEmptyChunks());
+        assertTrue(nlsFile.getAffectedChunks().contains(regionOriginChunk));
+        assertEquals(0b10, nlsFile.getMask(regionOriginChunk));
+
+        nlsFile.setCustomLuminance(regionOrigin.getRelative(0, 16, 0), 0);
+
+        assertEquals(0, nlsFile.getNonEmptyChunks());
+        assertFalse(nlsFile.getAffectedChunks().contains(regionOriginChunk));
+        assertEquals(0, nlsFile.getMask(regionOriginChunk));
+    }
+
+    @Test
+    public void testNextIndexChunk(@TempDir File tempDir) {
+        int regionX = 0;
+        int regionZ = 0;
+
+        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, regionX, regionZ));
+        NLSFile nlsFile = NLSFile.newFile(file, regionX, regionZ);
+
+        ChunkCoords regionOriginChunk = new ChunkCoords(32 * regionX, 32 * regionZ);
+        IntPosition regionOrigin = regionOriginChunk.getRelative(0, 0, 0);
+
+        nlsFile.setCustomLuminance(regionOrigin, 15);
+        nlsFile.setCustomLuminance(regionOrigin.getRelative(16, 0, 0), 15);
+
+        List<ChunkCoords> affected = nlsFile.getAffectedChunks();
+
+        assertEquals(2, nlsFile.getNonEmptyChunks());
+        assertEquals(nlsFile.getNonEmptyChunks(), affected.size());
+
+        assertTrue(affected.contains(regionOriginChunk));
+        assertTrue(affected.contains(regionOriginChunk.getRelativeChunk(1, 0)));
     }
 
     @Test
