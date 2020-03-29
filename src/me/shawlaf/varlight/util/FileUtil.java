@@ -21,6 +21,26 @@ public class FileUtil {
         return path.substring(path.lastIndexOf('.'));
     }
 
+    public static boolean deleteRecursively(File file) {
+        if (!file.isDirectory()) {
+            return file.delete();
+        }
+
+        File[] files = file.listFiles();
+
+        if (files == null) {
+            return file.delete();
+        }
+
+        for (File f : files) {
+            if (!deleteRecursively(f)) {
+                return false;
+            }
+        }
+
+        return file.delete();
+    }
+
     public static InputStream openStreamInflate(File file) throws IOException {
         FileInputStream fis = new FileInputStream(file);
 
