@@ -169,6 +169,28 @@ public class NLSFile {
         }
     }
 
+    public boolean hasChunkData(ChunkCoords chunkCoords) {
+        int index = chunkIndex(chunkCoords);
+
+        synchronized (lock) {
+            return chunks[index] != null && !chunks[index].isEmpty();
+        }
+    }
+
+    public void clearChunk(ChunkCoords chunkCoords) {
+        int index = chunkIndex(chunkCoords);
+
+        synchronized (lock) {
+            if (chunks[index] == null || chunks[index].isEmpty()) {
+                return;
+            }
+
+            chunks[index] = null;
+            --nonEmptyChunks;
+            modified = true;
+        }
+    }
+
     public int getMask(ChunkCoords chunkCoords) {
         synchronized (lock) {
             ChunkLightStorage cls = chunks[chunkIndex(chunkCoords)];
