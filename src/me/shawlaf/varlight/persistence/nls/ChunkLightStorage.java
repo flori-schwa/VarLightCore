@@ -1,6 +1,7 @@
 package me.shawlaf.varlight.persistence.nls;
 
 import lombok.Getter;
+import me.shawlaf.varlight.persistence.nls.exception.PositionOutOfBoundsException;
 import me.shawlaf.varlight.persistence.nls.io.NLSInputStream;
 import me.shawlaf.varlight.persistence.nls.io.NLSOutputStream;
 import me.shawlaf.varlight.util.ChunkCoords;
@@ -49,9 +50,12 @@ public class ChunkLightStorage {
     public int getCustomLuminance(IntPosition position) {
         int y = position.y >> 4;
 
+        if (position.getChunkX() != chunkX || position.getChunkZ() != chunkZ) {
+            throw new PositionOutOfBoundsException(position);
+        }
+
         if (y < 0 || y >= 16) {
-//            return 0;
-             throw new IllegalArgumentException(String.format("Position %s out of Range for Chunk [%d, %d]", position.toShortString(), chunkX, chunkZ));
+            throw new PositionOutOfBoundsException(position);
         }
 
         NibbleArray section = lightData[y];
@@ -66,8 +70,12 @@ public class ChunkLightStorage {
     public void setCustomLuminance(IntPosition position, int value) {
         int y = position.y >> 4;
 
+        if (position.getChunkX() != chunkX || position.getChunkZ() != chunkZ) {
+            throw new PositionOutOfBoundsException(position);
+        }
+
         if (y < 0 || y >= 16) {
-            throw new IllegalArgumentException(String.format("Position %s out of Range for Chunk [%d, %d]", position.toShortString(), chunkX, chunkZ));
+            throw new PositionOutOfBoundsException(position);
         }
 
         if (lightData[y] == null) {

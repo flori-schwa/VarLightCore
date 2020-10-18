@@ -134,64 +134,64 @@ public class NLSFileTest {
         assertEquals(4, nlsFile.getCustomLuminance(new IntPosition(0, 65, 0)));
     }
 
-    @Test
-    public void stressTest(@TempDir File tempDir) throws IOException {
-        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, 0, 0));
-        NLSFile nlsFile = NLSFile.newFile(file, 0, 0);
-
-        long start = System.currentTimeMillis();
-        long lastSplit = start;
-        long now;
-
-        System.out.println("[0ms] Writing");
-
-        int i = 1;
-
-        for (int y = 0; y < 256; ++y) {
-            for (int z = 0; z < 32 * 16; ++z) {
-                for (int x = 0; x < 32 * 16; ++x) {
-                    nlsFile.setCustomLuminance(new IntPosition(x, y, z), i);
-
-                    if (++i == 16) {
-                        i = 1;
-                    }
-                }
-            }
-        }
-
-        now = System.currentTimeMillis();
-        System.out.println("[" + (now - start) + "ms] Saving (Writing took: " + (now - lastSplit) + "ms)");
-        lastSplit = System.currentTimeMillis();
-
-        assertEquals(32 * 32, nlsFile.getNonEmptyChunks());
-
-        assertTrue(nlsFile.saveAndUnload());
-
-        now = System.currentTimeMillis();
-        System.out.println("[" + (now - start) + "ms] Reading (Saving took: " + (now - lastSplit) + "ms)");
-        lastSplit = now;
-
-        nlsFile = NLSFile.existingFile(file);
-
-        assertEquals(32 * 32, nlsFile.getNonEmptyChunks());
-
-        i = 1;
-
-        now = System.currentTimeMillis();
-        System.out.println("[" + (now - start) + "ms] Verifying (Reading took: " + (now - lastSplit) + "ms)");
-
-        for (int y = 0; y < 256; ++y) {
-            for (int z = 0; z < 32 * 16; ++z) {
-                for (int x = 0; x < 32 * 16; ++x) {
-                    assertEquals(i, nlsFile.getCustomLuminance(new IntPosition(x, y, z)));
-
-                    if (++i == 16) {
-                        i = 1;
-                    }
-                }
-            }
-        }
-    }
+//    @Test
+//    public void stressTest(@TempDir File tempDir) throws IOException {
+//        File file = new File(tempDir, String.format(NLSFile.FILE_NAME_FORMAT, 0, 0));
+//        NLSFile nlsFile = NLSFile.newFile(file, 0, 0);
+//
+//        long start = System.currentTimeMillis();
+//        long lastSplit = start;
+//        long now;
+//
+//        System.out.println("[0ms] Writing");
+//
+//        int i = 1;
+//
+//        for (int y = 0; y < 256; ++y) {
+//            for (int z = 0; z < 32 * 16; ++z) {
+//                for (int x = 0; x < 32 * 16; ++x) {
+//                    nlsFile.setCustomLuminance(new IntPosition(x, y, z), i);
+//
+//                    if (++i == 16) {
+//                        i = 1;
+//                    }
+//                }
+//            }
+//        }
+//
+//        now = System.currentTimeMillis();
+//        System.out.println("[" + (now - start) + "ms] Saving (Writing took: " + (now - lastSplit) + "ms)");
+//        lastSplit = System.currentTimeMillis();
+//
+//        assertEquals(32 * 32, nlsFile.getNonEmptyChunks());
+//
+//        assertTrue(nlsFile.saveAndUnload());
+//
+//        now = System.currentTimeMillis();
+//        System.out.println("[" + (now - start) + "ms] Reading (Saving took: " + (now - lastSplit) + "ms)");
+//        lastSplit = now;
+//
+//        nlsFile = NLSFile.existingFile(file);
+//
+//        assertEquals(32 * 32, nlsFile.getNonEmptyChunks());
+//
+//        i = 1;
+//
+//        now = System.currentTimeMillis();
+//        System.out.println("[" + (now - start) + "ms] Verifying (Reading took: " + (now - lastSplit) + "ms)");
+//
+//        for (int y = 0; y < 256; ++y) {
+//            for (int z = 0; z < 32 * 16; ++z) {
+//                for (int x = 0; x < 32 * 16; ++x) {
+//                    assertEquals(i, nlsFile.getCustomLuminance(new IntPosition(x, y, z)));
+//
+//                    if (++i == 16) {
+//                        i = 1;
+//                    }
+//                }
+//            }
+//        }
+//    }
 
     @Test
     public void testGetAffectedChunks(@TempDir File tempDir) throws IOException {

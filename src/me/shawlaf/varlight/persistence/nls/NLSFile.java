@@ -169,6 +169,24 @@ public class NLSFile {
         }
     }
 
+    public int getNonEmptyChunks() {
+        int count = 0;
+
+        synchronized (lock) {
+            for (ChunkLightStorage chunk : chunks) {
+                if (chunk == null) {
+                    continue;
+                }
+
+                if (!chunk.isEmpty()) {
+                    ++count;
+                }
+            }
+        }
+
+        return count;
+    }
+
     public boolean hasChunkData(ChunkCoords chunkCoords) {
         int index = chunkIndex(chunkCoords);
 
@@ -316,5 +334,4 @@ public class NLSFile {
     private int chunkIndex(int cx, int cz) {
         return cz << 5 | cx;
     }
-
 }
